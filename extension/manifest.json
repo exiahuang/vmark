@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "description": "Lightning-fast, keyboard-driven tab navigation. Auto-organize tabs, manage favorites, and browse history effortlessly.",
   "permissions": [
+    "tabs",
     "storage",
     "history",
     "bookmarks"
