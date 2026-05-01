@@ -57,4 +57,5 @@ export interface AppState {
   theme: string;
   language: Language;
   panelMode: PanelMode;
+  historyMaxResults: number;
 }

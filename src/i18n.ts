@@ -56,6 +56,8 @@ export const en = {
   save: 'Save',
   close: 'Close',
   github: 'GitHub',
+  historySettings: 'History Settings',
+  historyMaxResults: 'Max results',
 };
 
 export const zh: typeof en = {
@@ -116,6 +118,8 @@ export const zh: typeof en = {
   save: '保存',
   close: '关闭',
   github: 'GitHub',
+  historySettings: '历史设置',
+  historyMaxResults: '最大结果数',
 };
 
 export const ja: typeof en = {
@@ -176,6 +180,8 @@ export const ja: typeof en = {
   save: '保存',
   close: '閉じる',
   github: 'GitHub',
+  historySettings: '履歴設定',
+  historyMaxResults: '最大結果数',
 };
 
 export type Language = 'en' | 'zh' | 'ja';

@@ -1,12 +1,25 @@
 import { useStore, getFilteredItems, getCategoryLabel } from '../store';
 import { useTranslation } from '../hooks/useTranslation';
+import { useState, useEffect } from 'react';
 import './StatusBar.css';
+
+function useVersion() {
+  const [version, setVersion] = useState('');
+  useEffect(() => {
+    fetch(new URL('../../package.json', import.meta.url))
+      .then(r => r.json())
+      .then(pkg => setVersion(pkg.version || ''))
+      .catch(() => {});
+  }, []);
+  return version;
+}
 
 export function StatusBar() {
   const { mode, activeCategory, sortMode, listViewMode, setPanelMode, categoryRules, categoryLabels, language } = useStore();
   const state = useStore.getState();
   const filtered = getFilteredItems(state);
   const t = useTranslation();
+  const version = useVersion();
 
   const filteredCount = filtered.length;
 
@@ -36,6 +49,8 @@ export function StatusBar() {
         <button className="status-button" onClick={() => setPanelMode('SETTINGS')} title={t.settings}>
           {t.settings}
         </button>
+        <span className="status-divider">|</span>
+        <span className="status-version">v{version}</span>
       </div>
     </div>
   );

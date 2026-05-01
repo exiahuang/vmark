@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { DEFAULT_CATEGORY_LABELS, DEFAULT_RULES, useStore } from '../store';
 import { themes, type ThemeName } from '../themes';
 import { languages, getTranslations, type Language } from '../i18n';
@@ -106,9 +106,10 @@ function getTabSlotLabel(category: TabCategory, t: ReturnType<typeof getTranslat
 }
 
 export function OverlayPanel() {
-  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels } = useStore();
+  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels, historyMaxResults, setHistoryMaxResults } = useStore();
   const [draftRules, setDraftRules] = useState(() => cloneRules(categoryRules));
   const [draftLabels, setDraftLabels] = useState(() => cloneLabels(categoryLabels));
+  const [draftMaxResults, setDraftMaxResults] = useState(historyMaxResults);
   const t = getTranslations(language);
 
   if (panelMode === 'NONE') return null;
@@ -135,6 +136,9 @@ export function OverlayPanel() {
     setDraftLabels(nextLabels);
     setCategoryRules(nextRules);
     setCategoryLabels(nextLabels);
+    setTheme('default');
+    setLanguage('en');
+    setHistoryMaxResults(500);
   };
 
   const updateLabel = (category: 'CURRENT' | 'FAVORITES' | 'HISTORY', value: string) => {
@@ -212,6 +216,25 @@ export function OverlayPanel() {
                   );
                 })}
               </div>
+            </div>
+
+            <div className="settings-section-heading settings-section-heading-spaced">{t.historySettings}</div>
+            <div className="settings-row-fields">
+              <label className="settings-field inline">
+                <span>{t.historyMaxResults}</span>
+                <input
+                  type="number"
+                  className="settings-inline-input"
+                  min={1}
+                  max={10000}
+                  value={draftMaxResults}
+                  onChange={(e) => {
+                    const val = Math.max(1, Math.min(10000, Number(e.target.value) || 500));
+                    setDraftMaxResults(val);
+                    setHistoryMaxResults(val);
+                  }}
+                />
+              </label>
             </div>
 
             <div className="settings-section-heading settings-section-heading-spaced">{t.categoryRules}</div>

@@ -61,7 +61,7 @@ export const DEFAULT_RULES: Record<string, CategoryRule> = {
 
 const AUTO_CATEGORIES: TabCategory[] = ['SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 type CategorySourceState = Pick<AppState, 'items' | 'favorites' | 'browserHistory'> & Partial<Pick<AppState, 'activeCategory'>>;
-type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed'>;
+type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults'>;
 type CoreCategoryLabelState = Pick<AppState, 'categoryLabels'>;
 const STORAGE_KEY = 'vmark.state';
 export const DEFAULT_CATEGORY_LABELS = {
@@ -105,8 +105,10 @@ function normalizeUrlKey(url: string): string {
   }
 }
 
-async function savePersistedState(state: PersistedState): Promise<void> {
+async function savePersistedState(): Promise<void> {
   try {
+    await Promise.resolve();
+    const state = useStore.getState();
     await chrome.storage.local.set({
       [STORAGE_KEY]: {
         history: state.history,
@@ -118,6 +120,7 @@ async function savePersistedState(state: PersistedState): Promise<void> {
         categoryLabels: state.categoryLabels,
         itemRenames: state.itemRenames,
         groupCollapsed: state.groupCollapsed,
+        historyMaxResults: state.historyMaxResults,
       },
     });
   } catch {
@@ -142,6 +145,7 @@ export async function hydratePersistedState(): Promise<void> {
       categoryLabels: mergeCategoryLabels(persisted.categoryLabels),
       itemRenames: mergeItemRenames(persisted.itemRenames),
       groupCollapsed: mergeGroupCollapsed(persisted.groupCollapsed),
+      historyMaxResults: typeof persisted.historyMaxResults === 'number' && persisted.historyMaxResults > 0 ? persisted.historyMaxResults : 500,
     });
   } catch {
     // Ignore hydration failures and continue with empty collections.
@@ -385,6 +389,7 @@ interface Store extends AppState {
   setGroupCollapsedForKeys: (groupKeys: string[], collapsed: boolean) => void;
   setTheme: (theme: string) => void;
   setLanguage: (language: Language) => void;
+  setHistoryMaxResults: (maxResults: number) => void;
   fetchTabs: () => Promise<void>;
   fetchBookmarks: (query?: string) => Promise<void>;
   fetchHistory: (query?: string) => Promise<void>;
@@ -414,36 +419,17 @@ export const useStore = create<Store>((set) => ({
   theme: 'default',
   language: 'en' as Language,
   panelMode: 'NONE',
+  historyMaxResults: 500,
 
   setMode: (mode) => set({ mode }),
   setPanelMode: (panelMode) => set({ panelMode }),
   setActiveCategory: (activeCategory) => set({ activeCategory, selectedIndex: 0 }),
   setSortMode: (sortMode) => set((state) => {
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-      language: state.language,
-    });
+    void savePersistedState();
     return { sortMode };
   }),
   setListViewMode: (listViewMode) => set((state) => {
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      sortMode: state.sortMode,
-      listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-      language: state.language,
-    });
+    void savePersistedState();
     return { listViewMode };
   }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
@@ -479,18 +465,8 @@ export const useStore = create<Store>((set) => ({
   },
   addToHistory: (item) => set((state) => {
     const filtered = state.history.filter(h => h.url !== item.url);
-    const history = [item, ...filtered].slice(0, 500);
-    void savePersistedState({
-      history,
-      theme: state.theme,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-      language: state.language,
-    });
+    const history = [item, ...filtered].slice(0, state.historyMaxResults);
+    void savePersistedState();
     return { history };
   }),
   setSelectedIndex: (selectedIndex) => set({ selectedIndex }),
@@ -502,32 +478,12 @@ export const useStore = create<Store>((set) => ({
   }),
   setCategoryRules: (categoryRules) => set((state) => {
     const merged = mergeCategoryRules(categoryRules);
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: merged,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-      language: state.language,
-    });
+    void savePersistedState();
     return { categoryRules: merged };
   }),
   setCategoryLabels: (categoryLabels) => set((state) => {
     const merged = mergeCategoryLabels(categoryLabels);
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: merged,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-      language: state.language,
-    });
+    void savePersistedState();
     return { categoryLabels: merged };
   }),
   setItemRename: (url, title) => set((state) => {
@@ -538,34 +494,14 @@ export const useStore = create<Store>((set) => ({
     } else {
       next[url] = trimmed;
     }
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      language: state.language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: next,
-      groupCollapsed: state.groupCollapsed,
-    });
+    void savePersistedState();
     return { itemRenames: next };
   }),
   clearItemRename: (url) => set((state) => {
     if (!state.itemRenames[url]) return {};
     const next = { ...state.itemRenames };
     delete next[url];
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      language: state.language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: next,
-      groupCollapsed: state.groupCollapsed,
-    });
+    void savePersistedState();
     return { itemRenames: next };
   }),
   toggleGroupCollapsed: (groupKey) => set((state) => {
@@ -573,17 +509,7 @@ export const useStore = create<Store>((set) => ({
     const next = { ...state.groupCollapsed, [groupKey]: !state.groupCollapsed[groupKey] };
     const afterVisible = getVisibleItems({ ...state, groupCollapsed: next });
     const selectedIndex = resolveSelectedIndexAfterVisibilityChange(beforeVisible, afterVisible, state.selectedIndex);
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      language: state.language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: next,
-    });
+    void savePersistedState();
     return { groupCollapsed: next, selectedIndex };
   }),
   setGroupCollapsedForKeys: (groupKeys, collapsed) => set((state) => {
@@ -595,46 +521,28 @@ export const useStore = create<Store>((set) => ({
     const afterVisible = getVisibleItems({ ...state, groupCollapsed: next });
     const selectedIndex = resolveSelectedIndexAfterVisibilityChange(beforeVisible, afterVisible, state.selectedIndex);
 
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      language: state.language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: next,
-    });
+    void savePersistedState();
     return { groupCollapsed: next, selectedIndex };
   }),
    setTheme: (theme) => set((state) => {
-    void savePersistedState({
-      history: state.history,
-      theme,
-      language: state.language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-    });
+    void savePersistedState();
     return { theme };
   }),
   setLanguage: (language: Language) => set((state) => {
-    void savePersistedState({
-      history: state.history,
-      theme: state.theme,
-      language,
-      sortMode: state.sortMode,
-      listViewMode: state.listViewMode,
-      categoryRules: state.categoryRules,
-      categoryLabels: state.categoryLabels,
-      itemRenames: state.itemRenames,
-      groupCollapsed: state.groupCollapsed,
-    });
+    void savePersistedState();
     return { language };
+  }),
+  setHistoryMaxResults: (historyMaxResults: number) => set((state) => {
+    const value = Math.max(1, Math.min(10000, historyMaxResults));
+    void savePersistedState();
+    const next = { historyMaxResults: value } as Partial<typeof state>;
+    if (state.activeCategory === 'HISTORY') {
+      setTimeout(() => {
+        const s = useStore.getState();
+        void s.fetchHistory(s.searchQuery);
+      }, 0);
+    }
+    return next;
   }),
 
   fetchTabs: async () => {
@@ -710,9 +618,10 @@ export const useStore = create<Store>((set) => ({
   fetchHistory: async (query = '') => {
     try {
       const text = query.trim();
+      const state = useStore.getState();
       const entries = await chrome.history.search({
         text,
-        maxResults: 100,
+        maxResults: state.historyMaxResults,
         startTime: 0,
       });
 

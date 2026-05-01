@@ -3,7 +3,7 @@ import { useStore, getCategoryLabel } from '../store';
 import './SearchBar.css';
 
 export function SearchBar() {
-  const { mode, searchQuery, setSearchQuery, commandInput, setCommandInput, activeCategory, categoryRules, categoryLabels } = useStore();
+  const { mode, searchQuery, setSearchQuery, commandInput, setCommandInput, setMode, activeCategory, categoryRules, categoryLabels } = useStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export function SearchBar() {
 
   if (mode === 'NORMAL') {
     return (
-      <div className="search-bar">
+      <div className="search-bar" onClick={() => setMode('FILTER')} style={{ cursor: 'text' }}>
         <span className="search-hint">{getCategoryLabel(activeCategory, categoryRules, categoryLabels)}</span>
         {searchQuery && <span className="search-query-chip">/{searchQuery}</span>}
         <span className="search-hint">/ edit, Esc dismiss, : command</span>

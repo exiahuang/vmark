@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Vmark - Keyboard New Tab Manager",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Lightning-fast, keyboard-driven tab navigation. Auto-organize tabs, manage favorites, and browse history effortlessly.",
   "permissions": [
     "tabs",
