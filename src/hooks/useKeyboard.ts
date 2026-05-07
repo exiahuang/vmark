@@ -1,6 +1,7 @@
 import { useEffect, useCallback } from 'react';
 import { useStore, getFilteredItems, getVisibleItems, getVisibleGroupedItems, getGroupedItemsByDomain, getGroupKey, openTabItem } from '../store';
 import type { TabCategory } from '../types';
+import { detectFileType, preprocessPreviewUrl } from '../utils/filePreview';
 
 const TAB_CATEGORIES: TabCategory[] = ['CURRENT', 'FAVORITES', 'HISTORY', 'SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 let lastGPressAt = 0;
@@ -30,6 +31,7 @@ export function useKeyboard() {
     fetchHistory,
     trashItem,
     setItemRename,
+    toggleSearchMode,
   } = useStore();
 
   const handleKeyDown = useCallback(async (e: KeyboardEvent) => {
@@ -38,8 +40,18 @@ export function useKeyboard() {
     const filtered = getVisibleItems(state);
     const currentItem = filtered[state.selectedIndex];
 
+    // 如果焦点在文件预览的过滤框内，跳过所有快捷键
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'INPUT' && target.closest('.file-preview-filter-bar')) {
+      return;
+    }
+
     if (key === 'Escape') {
       e.preventDefault();
+      if (state.panelMode === 'FILE_PREVIEW') {
+        setPanelMode('NONE');
+        return;
+      }
       if (state.panelMode !== 'NONE') {
         setPanelMode('NONE');
         return;
@@ -52,7 +64,8 @@ export function useKeyboard() {
       return;
     }
 
-    if (state.panelMode !== 'NONE') {
+    // FILE_PREVIEW 模式下快捷键仍然可用，其他 panel 模式阻断
+    if (state.panelMode !== 'NONE' && state.panelMode !== 'FILE_PREVIEW') {
       return;
     }
 
@@ -359,9 +372,23 @@ export function useKeyboard() {
       return;
     }
 
+    if (key === '\\' && !ctrlKey && !metaKey) {
+      e.preventDefault();
+      toggleSearchMode();
+      return;
+    }
+
     if (key === 'r' && !ctrlKey && !metaKey) {
       e.preventDefault();
       fetchTabs();
+      return;
+    }
+
+    if (key === 'p' && !ctrlKey && !metaKey) {
+      e.preventDefault();
+      if (currentItem) {
+        useStore.getState().setPreview(currentItem.url, currentItem.title || undefined);
+      }
       return;
     }
 
@@ -388,6 +415,7 @@ export function useKeyboard() {
     selectPrevious,
     selectFirst,
     selectLast,
+    toggleSearchMode,
   ]);
 
   useEffect(() => {

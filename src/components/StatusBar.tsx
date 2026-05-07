@@ -15,7 +15,7 @@ function useVersion() {
 }
 
 export function StatusBar() {
-  const { mode, activeCategory, sortMode, listViewMode, setPanelMode, categoryRules, categoryLabels, language } = useStore();
+  const { mode, activeCategory, sortMode, listViewMode, searchMode, setPanelMode, categoryRules, categoryLabels, language } = useStore();
   const state = useStore.getState();
   const filtered = getFilteredItems(state);
   const t = useTranslation();
@@ -42,6 +42,8 @@ export function StatusBar() {
         <span className="status-sort">SORT: {sortMode.toUpperCase()}</span>
         <span className="status-divider">|</span>
         <span className="status-view">VIEW: {listViewMode.toUpperCase()}</span>
+        <span className="status-divider">|</span>
+        <span className="status-search">SEARCH: {searchMode === 'regex' ? 'REGEX' : 'PLAIN'}</span>
         <span className="status-divider">|</span>
         <button className="status-button" onClick={() => setPanelMode('HELP')} title={`${t.help} (?)`}>
           ?

@@ -7,10 +7,13 @@ import type {
   SortMode,
   ListViewMode,
   PanelMode,
+  SearchMode,
+  OfficeViewer,
   CategoryRule,
   Language
 } from '../types';
 import { getTranslations } from '../i18n';
+import { preprocessPreviewUrl } from '../utils/filePreview';
 
 export const DEFAULT_RULES: Record<string, CategoryRule> = {
   SNS: {
@@ -61,7 +64,7 @@ export const DEFAULT_RULES: Record<string, CategoryRule> = {
 
 const AUTO_CATEGORIES: TabCategory[] = ['SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 type CategorySourceState = Pick<AppState, 'items' | 'favorites' | 'browserHistory'> & Partial<Pick<AppState, 'activeCategory'>>;
-type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults'>;
+type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults' | 'officeViewer' | 'debug'>;
 type CoreCategoryLabelState = Pick<AppState, 'categoryLabels'>;
 const STORAGE_KEY = 'vmark.state';
 export const DEFAULT_CATEGORY_LABELS = {
@@ -121,6 +124,8 @@ async function savePersistedState(): Promise<void> {
         itemRenames: state.itemRenames,
         groupCollapsed: state.groupCollapsed,
         historyMaxResults: state.historyMaxResults,
+        officeViewer: state.officeViewer,
+        debug: state.debug,
       },
     });
   } catch {
@@ -146,6 +151,8 @@ export async function hydratePersistedState(): Promise<void> {
       itemRenames: mergeItemRenames(persisted.itemRenames),
       groupCollapsed: mergeGroupCollapsed(persisted.groupCollapsed),
       historyMaxResults: typeof persisted.historyMaxResults === 'number' && persisted.historyMaxResults > 0 ? persisted.historyMaxResults : 500,
+      officeViewer: persisted.officeViewer === 'microsoft' ? 'microsoft' : 'google',
+      debug: typeof persisted.debug === 'boolean' ? persisted.debug : false,
     });
   } catch {
     // Ignore hydration failures and continue with empty collections.
@@ -277,7 +284,7 @@ export function categorizeItems(items: TabItem[], category: string, rules: Recor
 }
 
 export function getFilteredItems(state: AppState): TabItem[] {
-  const { activeCategory, searchQuery, sortMode, categoryRules, itemRenames } = state;
+  const { activeCategory, searchQuery, searchMode, sortMode, categoryRules, itemRenames } = state;
 
   let filtered = getItemsForCategory(state, activeCategory);
 
@@ -286,12 +293,26 @@ export function getFilteredItems(state: AppState): TabItem[] {
   }
 
   if (searchQuery) {
-    const query = searchQuery.toLowerCase();
-    filtered = filtered.filter(
-      item =>
-        getRenamedTitle(item, itemRenames).toLowerCase().includes(query) ||
-        item.url.toLowerCase().includes(query)
-    );
+    if (searchMode === 'regex') {
+      try {
+        const regex = new RegExp(searchQuery, 'i');
+        filtered = filtered.filter(
+          item =>
+            regex.test(getRenamedTitle(item, itemRenames)) ||
+            regex.test(item.url)
+        );
+      } catch {
+        // Invalid regex, treat as empty result
+        filtered = [];
+      }
+    } else {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        item =>
+          getRenamedTitle(item, itemRenames).toLowerCase().includes(query) ||
+          item.url.toLowerCase().includes(query)
+      );
+    }
   }
 
   if (sortMode === 'frequency') {
@@ -374,6 +395,8 @@ interface Store extends AppState {
   setSortMode: (mode: SortMode) => void;
   setListViewMode: (mode: ListViewMode) => void;
   setSearchQuery: (query: string) => void;
+  setSearchMode: (mode: SearchMode) => void;
+  toggleSearchMode: () => void;
   setCommandInput: (input: string) => void;
   setItems: (items: TabItem[]) => void;
   addFavorite: (item: TabItem) => Promise<void>;
@@ -390,6 +413,10 @@ interface Store extends AppState {
   setTheme: (theme: string) => void;
   setLanguage: (language: Language) => void;
   setHistoryMaxResults: (maxResults: number) => void;
+  setPreview: (url: string, filename?: string) => void;
+  closePreview: () => void;
+  setOfficeViewer: (viewer: OfficeViewer) => void;
+  setDebug: (debug: boolean) => void;
   fetchTabs: () => Promise<void>;
   fetchBookmarks: (query?: string) => Promise<void>;
   fetchHistory: (query?: string) => Promise<void>;
@@ -406,6 +433,7 @@ export const useStore = create<Store>((set) => ({
   sortMode: 'time',
   listViewMode: 'compact',
   searchQuery: '',
+  searchMode: 'plain' as SearchMode,
   commandInput: '',
   items: [],
   favorites: [],
@@ -419,7 +447,11 @@ export const useStore = create<Store>((set) => ({
   theme: 'default',
   language: 'en' as Language,
   panelMode: 'NONE',
+  previewUrl: null,
+  previewFilename: null,
+  officeViewer: 'google' as OfficeViewer,
   historyMaxResults: 500,
+  debug: false,
 
   setMode: (mode) => set({ mode }),
   setPanelMode: (panelMode) => set({ panelMode }),
@@ -433,6 +465,8 @@ export const useStore = create<Store>((set) => ({
     return { listViewMode };
   }),
   setSearchQuery: (searchQuery) => set({ searchQuery }),
+  setSearchMode: (searchMode: SearchMode) => set({ searchMode }),
+  toggleSearchMode: () => set((state) => ({ searchMode: state.searchMode === 'plain' ? 'regex' as SearchMode : 'plain' as SearchMode })),
   setCommandInput: (commandInput) => set({ commandInput }),
   setItems: (items) => set({ items, selectedIndex: 0 }),
   addFavorite: async (item) => {
@@ -714,6 +748,13 @@ export const useStore = create<Store>((set) => ({
     const filtered = getVisibleItems(state);
     return { selectedIndex: Math.max(0, filtered.length - 1) };
   }),
+
+  setPreview: (url, filename) => set({ previewUrl: preprocessPreviewUrl(url), previewFilename: filename || null, panelMode: 'FILE_PREVIEW' }),
+
+  closePreview: () => set({ previewUrl: null, previewFilename: null, panelMode: 'NONE' }),
+
+  setOfficeViewer: (officeViewer: OfficeViewer) => { set({ officeViewer }); void savePersistedState(); },
+  setDebug: (debug: boolean) => { set({ debug }); void savePersistedState(); },
 }));
 
 function historyEntryId(entry: chrome.history.HistoryItem): number {

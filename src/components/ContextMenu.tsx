@@ -1,5 +1,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import type { TabItem, TabCategory } from '../types';
+import { detectFileType } from '../utils/filePreview';
+import { useStore } from '../store';
 import './ContextMenu.css';
 
 interface ContextMenuProps {
@@ -8,19 +10,41 @@ interface ContextMenuProps {
   item: TabItem;
   category: TabCategory;
   onClose: () => void;
-  onAction: (action: 'open' | 'open-bg' | 'bookmark' | 'delete' | 'copy-url' | 'copy-title') => void;
+  onAction: (action: 'open' | 'open-bg' | 'bookmark' | 'delete' | 'copy-url' | 'copy-title' | 'preview') => void;
 }
 
 export function ContextMenu({ x, y, item, category, onClose, onAction }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
+  const setPreview = useStore((s) => s.setPreview);
 
   const isFavorite = category === 'FAVORITES';
+  const fileType = detectFileType(item.url);
+  const canPreview = fileType.type !== 'unknown';
 
   const handleClickOutside = useCallback((e: MouseEvent) => {
     if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
       onClose();
     }
   }, [onClose]);
+
+  const handlePreview = useCallback(() => {
+    if (canPreview) {
+      setPreview(item.url, item.title || undefined);
+      onClose();
+    }
+  }, [canPreview, item.url, item.title, setPreview, onClose]);
+
+  useEffect(() => {
+    if (canPreview) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'p' && !e.ctrlKey && !e.metaKey) {
+          handlePreview();
+        }
+      };
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [canPreview, handlePreview]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
@@ -59,6 +83,16 @@ export function ContextMenu({ x, y, item, category, onClose, onAction }: Context
         </svg>
       ),
     },
+    ...(canPreview ? [{
+      label: 'Preview file',
+      action: 'preview' as const,
+      icon: (
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+          <circle cx="12" cy="12" r="3" />
+        </svg>
+      ),
+    }] : []),
     { type: 'separator' },
     {
       label: isFavorite ? 'Remove bookmark' : 'Add bookmark',
@@ -134,21 +168,25 @@ export function ContextMenu({ x, y, item, category, onClose, onAction }: Context
       <div className="context-menu-header">
         <span className="context-menu-title">{item.title || item.url}</span>
       </div>
-      {menuItems.map((item, index) => {
-        if ('type' in item && item.type === 'separator') {
+      {menuItems.map((menuItem, index) => {
+        if ('type' in menuItem && menuItem.type === 'separator') {
           return <div key={index} className="context-menu-separator" />;
         }
-        const menuItem = item as Exclude<typeof item, { type: string }>;
+        const item = menuItem as Exclude<typeof menuItem, { type: string }>;
         return (
           <button
-            key={menuItem.action}
-            className={`context-menu-item ${menuItem.danger ? 'danger' : ''}`}
+            key={item.action}
+            className={`context-menu-item ${item.danger ? 'danger' : ''}`}
             onClick={() => {
-              onAction(menuItem.action);
+              if (item.action === 'preview') {
+                handlePreview();
+              } else {
+                onAction(item.action);
+              }
             }}
           >
-            <span className="context-menu-icon">{menuItem.icon}</span>
-            <span className="context-menu-label">{menuItem.label}</span>
+            <span className="context-menu-icon">{item.icon}</span>
+            <span className="context-menu-label">{item.label}</span>
           </button>
         );
       })}

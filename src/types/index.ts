@@ -34,7 +34,11 @@ export type SortMode = 'time' | 'frequency';
 
 export type ListViewMode = 'compact' | 'detailed' | 'grouped';
 
-export type PanelMode = 'NONE' | 'HELP' | 'SETTINGS';
+export type SearchMode = 'plain' | 'regex';
+
+export type OfficeViewer = 'google' | 'microsoft';
+
+export type PanelMode = 'NONE' | 'HELP' | 'SETTINGS' | 'FILE_PREVIEW';
 
 export type Language = 'en' | 'zh' | 'ja';
 
@@ -44,6 +48,7 @@ export interface AppState {
   sortMode: SortMode;
   listViewMode: ListViewMode;
   searchQuery: string;
+  searchMode: SearchMode;
   commandInput: string;
   items: TabItem[];
   favorites: TabItem[];
@@ -57,5 +62,9 @@ export interface AppState {
   theme: string;
   language: Language;
   panelMode: PanelMode;
+  previewUrl: string | null;
+  previewFilename: string | null;
+  officeViewer: OfficeViewer;
   historyMaxResults: number;
+  debug?: boolean;
 }

@@ -58,6 +58,12 @@ export const en = {
   github: 'GitHub',
   historySettings: 'History Settings',
   historyMaxResults: 'Max results',
+  preview: 'Preview',
+  previewFile: 'Preview file',
+  searchMode: 'Search mode',
+  plain: 'PLAIN',
+  regex: 'REGEX',
+  officeViewer: 'Office Viewer',
 };
 
 export const zh: typeof en = {
@@ -120,6 +126,12 @@ export const zh: typeof en = {
   github: 'GitHub',
   historySettings: '历史设置',
   historyMaxResults: '最大结果数',
+  preview: '预览',
+  previewFile: '预览文件',
+  searchMode: '搜索模式',
+  plain: '普通',
+  regex: '正则',
+  officeViewer: 'Office 预览器',
 };
 
 export const ja: typeof en = {
@@ -182,6 +194,12 @@ export const ja: typeof en = {
   github: 'GitHub',
   historySettings: '履歴設定',
   historyMaxResults: '最大結果数',
+  preview: 'プレビュー',
+  previewFile: 'ファイルをプレビュー',
+  searchMode: '検索モード',
+  plain: 'プレーン',
+  regex: '正規表現',
+  officeViewer: 'Office ビューア',
 };
 
 export type Language = 'en' | 'zh' | 'ja';

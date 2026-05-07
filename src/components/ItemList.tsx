@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore, getFilteredItems, getVisibleItems, getGroupedItemsByDomain, getItemDisplayTitle, openTabItem } from '../store';
 import { useKeyboard } from '../hooks/useKeyboard';
 import type { TabItem, TabCategory } from '../types';
+import { detectFileType } from '../utils/filePreview';
 import { ContextMenu } from './ContextMenu';
 import './ItemList.css';
 
@@ -83,7 +84,7 @@ export function ItemList() {
     });
   };
 
-  const handleContextMenuAction = async (action: 'open' | 'open-bg' | 'bookmark' | 'delete' | 'copy-url' | 'copy-title') => {
+  const handleContextMenuAction = async (action: 'open' | 'open-bg' | 'bookmark' | 'delete' | 'copy-url' | 'copy-title' | 'preview') => {
     if (!contextMenu) return;
     const { item, category } = contextMenu;
     const state = useStore.getState();
@@ -111,6 +112,12 @@ export function ItemList() {
       case 'copy-title':
         const title = getItemDisplayTitle(item, state.itemRenames);
         await navigator.clipboard.writeText(title);
+        break;
+      case 'preview':
+        const fileInfo = detectFileType(item.url);
+        if (fileInfo.type !== 'unknown') {
+          state.setPreview(item.url, item.title || undefined);
+        }
         break;
     }
     setContextMenu(null);

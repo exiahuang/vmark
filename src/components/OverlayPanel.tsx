@@ -3,6 +3,7 @@ import { DEFAULT_CATEGORY_LABELS, DEFAULT_RULES, useStore } from '../store';
 import { themes, type ThemeName } from '../themes';
 import { languages, getTranslations, type Language } from '../i18n';
 import type { CategoryRule, TabCategory } from '../types';
+import { setDebug as setDebugUtil } from '../utils/debug';
 import './OverlayPanel.css';
 
 const HELP_SECTIONS = [
@@ -106,7 +107,7 @@ function getTabSlotLabel(category: TabCategory, t: ReturnType<typeof getTranslat
 }
 
 export function OverlayPanel() {
-  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels, historyMaxResults, setHistoryMaxResults } = useStore();
+  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels, historyMaxResults, setHistoryMaxResults, officeViewer, setOfficeViewer, debug, setDebug } = useStore();
   const [draftRules, setDraftRules] = useState(() => cloneRules(categoryRules));
   const [draftLabels, setDraftLabels] = useState(() => cloneLabels(categoryLabels));
   const [draftMaxResults, setDraftMaxResults] = useState(historyMaxResults);
@@ -237,6 +238,21 @@ export function OverlayPanel() {
               </label>
             </div>
 
+            <div className="settings-section-heading settings-section-heading-spaced">Debug</div>
+            <div className="settings-row-fields">
+              <label className="settings-field inline">
+                <span>Enable debug logging</span>
+                <input
+                  type="checkbox"
+                  checked={debug}
+                  onChange={(e) => {
+                    setDebug(e.target.checked);
+                    setDebugUtil(e.target.checked);
+                  }}
+                />
+              </label>
+            </div>
+
             <div className="settings-section-heading settings-section-heading-spaced">{t.categoryRules}</div>
             <div className="settings-toolbar">
               <div className="settings-note">
@@ -333,6 +349,22 @@ export function OverlayPanel() {
                   })}
                 </tbody>
               </table>
+            </div>
+
+            <div className="settings-section-heading">{t.officeViewer || 'Office Viewer'}</div>
+            <div className="theme-grid compact">
+              {(['google', 'microsoft'] as const).map((viewer) => {
+                const active = officeViewer === viewer;
+                return (
+                  <button
+                    key={viewer}
+                    className={`theme-card ${active ? 'active' : ''}`}
+                    onClick={() => setOfficeViewer(viewer)}
+                  >
+                    <span className="theme-name">{viewer === 'google' ? 'Google Docs Viewer' : 'Microsoft Office Online'}</span>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="settings-toolbar settings-toolbar-bottom">
