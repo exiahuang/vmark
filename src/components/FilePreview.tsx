@@ -25,6 +25,98 @@ const getOfficeViewerUrl = (url: string, officeViewer: string = 'google'): strin
   return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
 };
 
+// HtmlPreview for HTML content (e.g., Stack Overflow API)
+const HtmlPreview: React.FC<{ content: string }> = ({ content }) => {
+  const [filterQuery, setFilterQuery] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const filterQueryRef = useRef(filterQuery);
+
+  useEffect(() => { filterQueryRef.current = filterQuery; }, [filterQuery]);
+
+  // Keyboard: f focuses filter, Esc clears, n/m scrolls
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+      if (e.key === 'f') {
+        e.preventDefault();
+        inputRef.current?.focus();
+      }
+      if (e.key === 'Escape') {
+        if (document.activeElement === inputRef.current) {
+          setFilterQuery('');
+          inputRef.current?.blur();
+        } else if (filterQueryRef.current) {
+          setFilterQuery('');
+        }
+      }
+      if (e.key === 'n') {
+        containerRef.current?.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' });
+      }
+      if (e.key === 'm') {
+        containerRef.current?.scrollBy({ top: window.innerHeight * 0.8, behavior: 'smooth' });
+      }
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('keydown', handleKeyDown);
+      if (!container.hasAttribute('data-focused')) {
+        container.setAttribute('data-focused', 'true');
+        container.focus();
+      }
+    }
+    return () => {
+      if (container) {
+        container.removeEventListener('keydown', handleKeyDown);
+      }
+    };
+  }, []);
+
+  const getFilteredHtml = () => {
+    if (!filterQuery.trim()) return content;
+    const lines = content.split('\n');
+    const query = filterQuery.toLowerCase();
+    const filtered = lines.filter(line => {
+      const text = line.replace(/<[^>]*>/g, '');
+      return text.toLowerCase().includes(query);
+    });
+    return filtered.length > 0
+      ? filtered.join('\n')
+      : '<div class="file-preview-no-match">No matching lines</div>';
+  };
+
+  return (
+    <div className="file-preview-markdown-container" ref={containerRef} tabIndex={-1}>
+      <div className="file-preview-filter-bar">
+        <span className="file-preview-filter-prefix">🔍</span>
+        <input
+          ref={inputRef}
+          key="html-filter-input"
+          type="text"
+          className="file-preview-filter-input"
+          placeholder="Filter lines... (Esc to clear)"
+          value={filterQuery}
+          onChange={(e) => setFilterQuery(e.target.value)}
+          onClick={(e) => e.stopPropagation()}
+        />
+        {filterQuery && (
+          <button
+            className="file-preview-filter-clear"
+            onClick={() => { setFilterQuery(''); inputRef.current?.focus(); }}
+            title="Clear filter"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+      <div className="file-preview-markdown" dangerouslySetInnerHTML={{ __html: getFilteredHtml() }} />
+    </div>
+  );
+};
+
 // MarkdownPreview with always-visible filter bar
 const MarkdownPreview: React.FC<{ content: string }> = ({ content }) => {
   const [html, setHtml] = useState('');
@@ -108,6 +200,7 @@ const MarkdownPreview: React.FC<{ content: string }> = ({ content }) => {
   return (
     <div className="file-preview-markdown-container" ref={containerRef} tabIndex={-1}>
       <div className="file-preview-filter-bar">
+        <span className="file-preview-filter-prefix">🔍</span>
         <input
           ref={inputRef}
           key="md-filter-input"
@@ -116,15 +209,17 @@ const MarkdownPreview: React.FC<{ content: string }> = ({ content }) => {
           placeholder="Filter lines... (Esc to clear)"
           value={filterQuery}
           onChange={(e) => setFilterQuery(e.target.value)}
-          onKeyDown={(e) => {
-            // 过滤框内：所有按键都不冒泡出去
-            e.stopPropagation();
-            if (e.key === 'Escape') {
-              setFilterQuery('');
-              inputRef.current?.blur();
-            }
-          }}
+          onClick={(e) => e.stopPropagation()}
         />
+        {filterQuery && (
+          <button
+            className="file-preview-filter-clear"
+            onClick={() => { setFilterQuery(''); inputRef.current?.focus(); }}
+            title="Clear filter"
+          >
+            ✕
+          </button>
+        )}
       </div>
       <div className="file-preview-markdown" dangerouslySetInnerHTML={{ __html: getFilteredHtml() }} />
     </div>
@@ -235,6 +330,7 @@ const CodePreview: React.FC<{ content: string; filename: string }> = ({ content,
   return (
     <div className="file-preview-code" ref={containerRef} tabIndex={-1}>
       <div className="file-preview-filter-bar">
+        <span className="file-preview-filter-prefix">🔍</span>
         <input
           ref={inputRef}
           key="code-filter-input"
@@ -243,15 +339,17 @@ const CodePreview: React.FC<{ content: string; filename: string }> = ({ content,
           placeholder="Filter lines... (Esc to clear)"
           value={filterQuery}
           onChange={(e) => setFilterQuery(e.target.value)}
-          onKeyDown={(e) => {
-            // 过滤框内：所有按键都不冒泡出去
-            e.stopPropagation();
-            if (e.key === 'Escape') {
-              setFilterQuery('');
-              inputRef.current?.blur();
-            }
-          }}
+          onClick={(e) => e.stopPropagation()}
         />
+        {filterQuery && (
+          <button
+            className="file-preview-filter-clear"
+            onClick={() => { setFilterQuery(''); inputRef.current?.focus(); }}
+            title="Clear filter"
+          >
+            ✕
+          </button>
+        )}
       </div>
       <pre dangerouslySetInnerHTML={{ __html: getFilteredContent() }} />
     </div>
@@ -270,26 +368,28 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
 
   useEffect(() => {
     const info = detectFileType(processedUrl);
-    setFileType(info.type);
+    const detectedType = info.type;
+    setFileType(detectedType);
     setContent('');
     setError(null);
-    setLoading(true);
-  }, [processedUrl]);
 
-  useEffect(() => {
-    if (!fileType) return;
-    if (['xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'].includes(fileType)) {
-      setLoading(false); return;
+    // 这些类型不需要 fetch，直接渲染
+    const noFetchTypes = ['xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt', 'pdf', 'image', 'video', 'audio', 'embed'];
+    if (noFetchTypes.includes(detectedType) || !detectedType) {
+      setLoading(false);
+      return;
     }
-    if (['pdf', 'image', 'video', 'audio'].includes(fileType)) {
-      setLoading(false); return;
-    }
-    if (fileType === 'unknown') {
-      setLoading(false); return;
-    }
+
+    // markdown/code/unknown/gist/stackoverflow 都尝试 fetch
     setLoading(true);
     setError(null);
-    chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: processedUrl }, (response) => {
+
+    // 清理 URL（移除 fragment）
+    const cleanUrl = processedUrl.split('#')[0];
+    console.log('[FilePreview] Fetching via FETCH_PROXY:', cleanUrl, 'type:', detectedType);
+
+    chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: cleanUrl }, (response) => {
+      console.log('[FilePreview] FETCH_PROXY response:', response, 'lastError:', chrome.runtime.lastError);
       if (chrome.runtime.lastError) {
         setError('Failed to load file: ' + chrome.runtime.lastError.message);
         setLoading(false); return;
@@ -305,14 +405,14 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
         setLoading(false);
       }
     });
-  }, [processedUrl, fileType]);
+  }, [processedUrl]);
 
   const getFileIcon = (type: string): string => {
     const icons: Record<string, string> = {
       'pdf': '📕', 'image': '🖼️', 'video': '🎬', 'audio': '🎵',
       'xlsx': '📊', 'xls': '📊', 'docx': '📝', 'doc': '📝',
       'pptx': '📽️', 'ppt': '📽️', 'markdown': '📄', 'code': '💻',
-      'unknown': '📄',
+      'unknown': '📄', 'embed': '🎥', 'gist': '📝', 'stackoverflow': '❓',
     };
     return icons[type] || '📄';
   };
@@ -380,17 +480,36 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
         return <MarkdownPreview content={content} />;
       case 'code':
         return <CodePreview content={content} filename={displayFilename} />;
+      case 'embed':
+        return (
+          <iframe
+            src={processedUrl}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title={displayFilename}
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        );
+      case 'gist':
+        return <CodePreview content={content} filename={displayFilename} />;
+      case 'stackoverflow':
+        return <HtmlPreview content={content} />;
       default:
+        // 尝试用 fetch 获取文本内容（通过 background 代理）
         return (
           <div className="file-preview-content">
-            <div className="file-preview-error">
-              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
-              <p>This file cannot be previewed in-frame.</p>
-              <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '8px' }}>
-                The server denied iframe embedding via X-Frame-Options.
-              </p>
-              <button className="file-preview-btn" onClick={() => window.open(processedUrl, '_blank')}>Open in New Tab</button>
-            </div>
+            {content ? (
+              <pre className="file-preview-text">{content}</pre>
+            ) : (
+              <div className="file-preview-error">
+                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🚫</div>
+                <p>Unable to preview this file type.</p>
+                <p style={{ fontSize: '12px', color: 'var(--color-text-muted)', marginTop: '8px' }}>
+                  The server denied iframe embedding via X-Frame-Options.
+                </p>
+                <button className="file-preview-btn" onClick={() => window.open(processedUrl, '_blank')}>Open in New Tab</button>
+              </div>
+            )}
           </div>
         );
     }

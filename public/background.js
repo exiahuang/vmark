@@ -20,16 +20,47 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
     fetch(request.url, {
       signal: controller.signal,
+      cache: 'reload',  // 强制重新请求，避免 304 空响应
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'text/plain, text/markdown, */*',
+        'Accept': 'text/plain, text/markdown, application/json, */*',
       }
     })
       .then(async (response) => {
         clearTimeout(timeout);
         debugLog('Response:', response.status, response.statusText);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        // 304 Not Modified 也是成功（background fetch 不受 CORS 限制）
+        if (!response.ok && response.status !== 304) throw new Error(`HTTP ${response.status}`);
         const text = await response.text();
+
+        // Qiita API 返回 JSON，提取 body 字段（markdown 内容）
+        if (request.url.includes('qiita.com/api/v2/items/')) {
+          try {
+            const json = JSON.parse(text);
+            if (json.body) {
+              debugLog('Qiita API: extracted body, length:', json.body.length);
+              sendResponse({ ok: true, text: json.body });
+              return;
+            }
+          } catch (e) {
+            debugLog('Qiita API: JSON parse failed, using raw text');
+          }
+        }
+
+        // Stack Overflow API 返回 JSON，提取 items[0].body（HTML 内容）
+        if (request.url.includes('api.stackexchange.com')) {
+          try {
+            const json = JSON.parse(text);
+            if (json.items && json.items[0] && json.items[0].body) {
+              debugLog('Stack Overflow API: extracted body, length:', json.items[0].body.length);
+              sendResponse({ ok: true, text: json.items[0].body });
+              return;
+            }
+          } catch (e) {
+            debugLog('Stack Overflow API: JSON parse failed, using raw text');
+          }
+        }
+
         debugLog('Fetched length:', text.length);
         sendResponse({ ok: true, text });
       })

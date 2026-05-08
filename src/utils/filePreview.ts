@@ -11,7 +11,10 @@ export type FileType =
   | 'ppt'
   | 'markdown'
   | 'code'
-  | 'unknown';
+  | 'unknown'
+  | 'embed'
+  | 'gist'
+  | 'stackoverflow';
 
 export interface FilePreviewInfo {
   type: FileType;
@@ -117,8 +120,11 @@ function getExtensionFromUrl(url: string): string {
 /**
  * 预处理预览 URL，处理特殊平台的 URL 转换
  * 1. GitHub blob URL -> raw.githubusercontent.com
- * 2. Qiita 文章 URL -> 添加 .md 后缀
- * 3. 已经是 Google Docs Viewer 的 URL 不做处理
+ * 2. Qiita 文章 .md URL 直接返回 markdown，无需转换
+ * 3. YouTube / Bilibili / Vimeo -> embed URL
+ * 4. GitHub Gist -> raw URL
+ * 5. Stack Overflow -> API URL
+ * 6. CodePen -> embed URL
  */
 export function preprocessPreviewUrl(url: string): string {
   try {
@@ -134,16 +140,81 @@ export function preprocessPreviewUrl(url: string): string {
       }
     }
 
-    // 2. Qiita 文章 URL 添加 .md 后缀尝试获取 markdown
-    // https://qiita.com/{user}/items/{id} -> https://qiita.com/{user}/items/{id}.md
+    // 2. Qiita 文章 URL 转 API URL，通过 FETCH_PROXY 获取 markdown
+    // https://qiita.com/{user}/items/{id} -> https://qiita.com/api/v2/items/{id}
+    // https://qiita.com/{user}/items/{id}.md -> https://qiita.com/api/v2/items/{id}
     if (urlObj.hostname === 'qiita.com') {
-      const match = urlObj.pathname.match(/^\/([^/]+)\/items\/([^/]+)$/);
-      if (match && !urlObj.pathname.endsWith('.md')) {
-        return `https://qiita.com${match[0]}.md`;
+      const match = urlObj.pathname.match(/^\/([^\/]+)\/items\/([^\/?#]+)/);
+      if (match) {
+        const itemId = match[2].replace(/\.md$/i, '');
+        return `https://qiita.com/api/v2/items/${itemId}`;
       }
     }
 
-    // 3. 已经是 Google Docs Viewer URL，直接返回
+    // 3. YouTube URL 转 embed URL
+    // https://youtube.com/watch?v={id} / https://youtu.be/{id} -> https://www.youtube.com/embed/{id}
+    if (urlObj.hostname === 'youtube.com' || urlObj.hostname === 'www.youtube.com') {
+      const videoId = urlObj.searchParams.get('v');
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0`;
+      }
+    }
+    if (urlObj.hostname === 'youtu.be') {
+      const videoId = urlObj.pathname.replace(/^\//, '');
+      if (videoId) {
+        return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0`;
+      }
+    }
+
+    // 4. Bilibili URL 转 embed URL
+    // https://bilibili.com/video/BV{id} / https://www.bilibili.com/video/BV{id} -> https://player.bilibili.com/player.html?bvid=BV{id}
+    if (urlObj.hostname === 'bilibili.com' || urlObj.hostname === 'www.bilibili.com') {
+      const match = urlObj.pathname.match(/\/video\/(BV[^\/?#]+)/);
+      if (match) {
+        return `https://player.bilibili.com/player.html?bvid=${match[1]}&autoplay=0`;
+      }
+    }
+
+    // 5. Vimeo URL 转 embed URL
+    // https://vimeo.com/{id} -> https://player.vimeo.com/video/{id}
+    if (urlObj.hostname === 'vimeo.com') {
+      const match = urlObj.pathname.match(/^\/([0-9]+)/);
+      if (match) {
+        return `https://player.vimeo.com/video/${match[1]}?autoplay=0`;
+      }
+    }
+
+    // 6. GitHub Gist URL 转 raw URL
+    // https://gist.github.com/{user}/{gistId} -> https://gist.githubusercontent.com/{user}/{gistId}/raw
+    if (urlObj.hostname === 'gist.github.com') {
+      const match = urlObj.pathname.match(/^\/([^\/]+)\/([^\/]+)/);
+      if (match) {
+        const [, user, gistId] = match;
+        return `https://gist.githubusercontent.com/${user}/${gistId}/raw`;
+      }
+    }
+
+    // 7. Stack Overflow URL 转 API URL
+    // https://stackoverflow.com/questions/{id}/... -> https://api.stackexchange.com/2.3/questions/{id}?site=stackoverflow&filter=withbody
+    if (urlObj.hostname === 'stackoverflow.com') {
+      const match = urlObj.pathname.match(/^\/questions\/([0-9]+)/);
+      if (match) {
+        const questionId = match[1];
+        return `https://api.stackexchange.com/2.3/questions/${questionId}?site=stackoverflow&filter=withbody`;
+      }
+    }
+
+    // 8. CodePen URL 转 embed URL
+    // https://codepen.io/{user}/pen/{penId} -> https://codepen.io/{user}/embed/{penId}
+    if (urlObj.hostname === 'codepen.io') {
+      const match = urlObj.pathname.match(/^\/([^\/]+)\/pen\/([^\/]+)/);
+      if (match) {
+        const [, user, penId] = match;
+        return `https://codepen.io/${user}/embed/${penId}`;
+      }
+    }
+
+    // 9. 已经是 Google Docs Viewer URL，直接返回
     if (urlObj.hostname === 'docs.google.com' && urlObj.pathname.startsWith('/viewer')) {
       return url;
     }
@@ -160,6 +231,16 @@ export function detectFileType(url: string, mimeType?: string): FilePreviewInfo 
     return { type, url, extension: getExtensionFromUrl(url), mimeType };
   }
 
+  // 检查是否为 Qiita API URL（由 preprocessPreviewUrl 转换而来）
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname === 'qiita.com' && urlObj.pathname.startsWith('/api/v2/items/')) {
+      return { type: 'markdown', url, extension: 'md' };
+    }
+  } catch {
+    // ignore
+  }
+
   const extension = getExtensionFromUrl(url);
   if (extension && extensionMap[extension]) {
     return { type: extensionMap[extension], url, extension };
@@ -171,6 +252,43 @@ export function detectFileType(url: string, mimeType?: string): FilePreviewInfo 
       if (/document|word|\.doc/.test(url)) return { type: 'docx', url, extension: 'docx' };
       if (/presentation|powerpoint|\.ppt/.test(url)) return { type: 'pptx', url, extension: 'pptx' };
     }
+  }
+
+  // Detect embed platforms (processed embed URLs)
+  try {
+    const urlObj = new URL(url);
+
+    // YouTube embed
+    if (urlObj.hostname === 'www.youtube.com' && urlObj.pathname.startsWith('/embed/')) {
+      return { type: 'embed', url, extension: 'youtube' };
+    }
+
+    // Bilibili embed
+    if (urlObj.hostname === 'player.bilibili.com') {
+      return { type: 'embed', url, extension: 'bilibili' };
+    }
+
+    // Vimeo embed
+    if (urlObj.hostname === 'player.vimeo.com') {
+      return { type: 'embed', url, extension: 'vimeo' };
+    }
+
+    // CodePen embed
+    if (urlObj.hostname === 'codepen.io' && urlObj.pathname.includes('/embed/')) {
+      return { type: 'embed', url, extension: 'codepen' };
+    }
+
+    // GitHub Gist raw
+    if (urlObj.hostname === 'gist.githubusercontent.com') {
+      return { type: 'gist', url, extension: 'gist' };
+    }
+
+    // Stack Overflow API
+    if (urlObj.hostname === 'api.stackexchange.com') {
+      return { type: 'stackoverflow', url, extension: 'stackoverflow' };
+    }
+  } catch {
+    // ignore
   }
 
   try {
@@ -208,6 +326,9 @@ export function getFileTypeDisplayName(fileType: FileType): string {
     'markdown': 'Markdown',
     'code': 'Code/Text',
     'unknown': 'Unknown',
+    'embed': 'Embed Video',
+    'gist': 'GitHub Gist',
+    'stackoverflow': 'Stack Overflow',
   };
   return displayNames[fileType] || 'Unknown';
 }

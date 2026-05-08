@@ -1,21 +1,20 @@
-let debugEnabled = false;
-
-// 初始化时从 store 获取 debug 状态
-try {
-  const store = (window as any).__VMARK_STORE__;
-  if (store && store.getState) {
-    debugEnabled = store.getState().debug || false;
-  }
-} catch {
-  // ignore
-}
+import { useStore } from '../store';
 
 export function setDebug(value: boolean): void {
-  debugEnabled = value;
+  try {
+    useStore.getState().setDebug(value);
+  } catch {
+    // Store not available, skip
+  }
 }
 
 export function debugLog(...args: any[]): void {
-  if (debugEnabled) {
-    console.log('[Vmark Debug]', ...args);
+  try {
+    const state = useStore.getState();
+    if (state?.debug) {
+      console.log('[Vmark Debug]', ...args);
+    }
+  } catch {
+    // Store not available, skip logging
   }
 }
