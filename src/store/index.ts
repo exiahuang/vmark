@@ -151,7 +151,7 @@ export async function hydratePersistedState(): Promise<void> {
       itemRenames: mergeItemRenames(persisted.itemRenames),
       groupCollapsed: mergeGroupCollapsed(persisted.groupCollapsed),
       historyMaxResults: typeof persisted.historyMaxResults === 'number' && persisted.historyMaxResults > 0 ? persisted.historyMaxResults : 500,
-      officeViewer: persisted.officeViewer === 'microsoft' ? 'microsoft' : 'google',
+      officeViewer: ['builtin', 'google', 'microsoft'].includes(persisted.officeViewer) ? persisted.officeViewer : 'google',
       debug: typeof persisted.debug === 'boolean' ? persisted.debug : false,
     });
   } catch {

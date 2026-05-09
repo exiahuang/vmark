@@ -36,7 +36,7 @@ export type ListViewMode = 'compact' | 'detailed' | 'grouped';
 
 export type SearchMode = 'plain' | 'regex';
 
-export type OfficeViewer = 'google' | 'microsoft';
+export type OfficeViewer = 'builtin' | 'google' | 'microsoft';
 
 export type PanelMode = 'NONE' | 'HELP' | 'SETTINGS' | 'FILE_PREVIEW';
 

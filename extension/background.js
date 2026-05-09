@@ -39,9 +39,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
+    // 按需发送凭证：只有网页预览（readability/unknown）需要 cookie
     fetch(request.url, {
       signal: controller.signal,
       cache: 'reload',
+      credentials: request.withCredentials ? 'include' : 'same-origin',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
         'Accept': 'text/plain, text/markdown, application/json, text/csv, text/html,application/xhtml+xml,application/xml, application/xml, */*',
@@ -53,6 +55,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
         if (!response.ok && response.status !== 304) {
           throw new Error(`HTTP ${response.status}`);
+        }
+
+        // PDF 等二进制文件走 arraybuffer 返回
+        if (request.responseType === 'arraybuffer') {
+          const arrayBuffer = await response.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          const mimeType = response.headers.get('content-type') || 'application/octet-stream';
+          sendResponse({ ok: true, data: btoa(binary), mimeType });
+          return;
         }
 
         const text = await response.text();

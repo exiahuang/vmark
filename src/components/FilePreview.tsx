@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { detectFileType, getFileTypeDisplayName, preprocessPreviewUrl } from '../utils/filePreview';
 import { useStore } from '../store';
 import { debugLog } from '../utils/debug';
@@ -22,60 +22,55 @@ const getOfficeViewerUrl = (url: string, officeViewer: string = 'google'): strin
     return url;
   }
 
-  try {
-    const urlObj = new URL(url);
-    
-    // SharePoint 文件处理 - 支持公司域名
-    const isSharePoint = urlObj.hostname.includes('sharepoint.com') || 
-                        urlObj.hostname.includes('.sharepoint.') ||
-                        url.includes('/_layouts/') ||
-                        url.includes('/sites/') ||
-                        url.includes('/Shared%20Documents/') ||
-                        url.includes('/Documents/');
-    
-    if (isSharePoint) {
-      // SharePoint Doc.aspx 格式
-      if (url.includes('/_layouts/15/Doc.aspx') || url.includes('/_layouts/16/Doc.aspx')) {
-        const match = url.match(/sourcedoc=([^&]+)/);
-        if (match) {
-          const sourceDoc = decodeURIComponent(match[1]);
-          const downloadUrl = `${urlObj.origin}${sourceDoc}?download=1`;
-          return officeViewer === 'microsoft' 
-            ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
-            : `https://docs.google.com/viewer?url=${encodeURIComponent(downloadUrl)}&embedded=true`;
-        }
-      }
-      
-      // 标准 SharePoint 文件路径
-      if (urlObj.pathname.includes('/Shared Documents/') || 
-          urlObj.pathname.includes('/Documents/') ||
-          urlObj.pathname.includes('/sites/')) {
-        const downloadUrl = `${url}${url.includes('?') ? '&' : '?'}download=1`;
-        return officeViewer === 'microsoft' 
-          ? `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(downloadUrl)}`
-          : `https://docs.google.com/viewer?url=${encodeURIComponent(downloadUrl)}&embedded=true`;
-      }
-    }
-
-    // Google Drive 文件处理
-    if (urlObj.hostname === 'drive.google.com') {
-      const match = urlObj.pathname.match(/\/file\/d\/([^\/]+)/);
-      if (match) {
-        const fileId = match[1];
-        return `https://docs.google.com/viewer?url=https://drive.google.com/uc?id=${fileId}&export=download&embedded=true`;
-      }
-    }
-  } catch {
-    // ignore
+  const encoded = encodeURIComponent(url);
+  if (officeViewer === 'google') {
+    return `https://docs.google.com/viewer?url=${encoded}&embedded=true`;
   }
-
-  // 默认处理
-  if (officeViewer === 'microsoft') {
-    return `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
-  } else {
-    return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
-  }
+  return `https://view.officeapps.live.com/op/view.aspx?src=${encoded}`;
 };
+
+// 过滤 xlsx 表格 HTML：隐藏不包含搜索词的行
+function filterXlsxHtml(html: string, filter: string): string {
+  if (!filter || !html || html.length > 5000000) return html;
+  const lower = filter.toLowerCase();
+  if (html.indexOf('<tr') === -1) return html;
+  const parts = html.split('</tr>');
+  return parts.map((part) => {
+    if (part.indexOf('<tr') === -1) return part;
+    const row = part + '</tr>';
+    if (row.toLowerCase().includes(lower)) return row;
+    return row.includes('style=') ? row.replace(/style=["'][^"']*["']/, 'style="display:none"') : row.replace('<tr', '<tr style="display:none"');
+  }).join('');
+}
+
+// 过滤 docx HTML：隐藏不包含搜索词的段落
+function filterDocxHtml(html: string, filter: string): string {
+  if (!filter || !html || html.length > 5000000) return html;
+  const lower = filter.toLowerCase();
+  const endTag = '</p>';
+  const idx = html.indexOf(endTag);
+  if (idx === -1) return html;
+  const parts = html.split(endTag);
+  return parts.map((part) => {
+    if (part.indexOf('<p') === -1) return part;
+    const para = part + endTag;
+    if (para.toLowerCase().includes(lower)) return para;
+    return para.includes('style=') ? para.replace(/style=["'][^"']*["']/, 'style="display:none"') : para.replace('<p', '<p style="display:none"');
+  }).join('');
+}
+
+// 过滤栏键盘快捷键处理 (所有 preview 共用)
+function usePreviewKeyboard(filter: string, setFilter: (v: string) => void, inputRef: React.RefObject<HTMLInputElement | null>) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'f') { e.preventDefault(); inputRef.current?.focus(); }
+      if (e.key === 'Escape' && document.activeElement === inputRef.current) { setFilter(''); inputRef.current?.blur(); }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+}
 
 // OfficeDocumentPreview with fallback options and SharePoint support
 const OfficeDocumentPreview: React.FC<{ 
@@ -989,40 +984,179 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [content, setContent] = useState('');
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [currentSheet, setCurrentSheet] = useState(0);
+  const [officeFilter, setOfficeFilter] = useState('');
   const [retryCount, setRetryCount] = useState(0);
+  const blobUrlRef = useRef<string | null>(null);
+  const sheetDataRef = useRef<{ names: string[]; htmls: string[] }>({ names: [], htmls: [] });
+  const officeFilterInputRef = useRef<HTMLInputElement>(null);
   const processedUrl = preprocessPreviewUrl(url);
   const officeViewer = useStore((s) => s.officeViewer);
 
   const displayFilename = filename || processedUrl.split('/').pop() || 'file';
 
+  // pptx filter memoized
+  const pptxFilteredLines = useMemo(() => {
+    if (!officeFilter) return content;
+    const lower = officeFilter.toLowerCase();
+    return content.split('\n').filter(line => line.toLowerCase().includes(lower)).join('\n');
+  }, [content, officeFilter]);
+
   const handleRetry = () => {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setPdfBlobUrl(null);
     setRetryCount(prev => prev + 1);
     setError(null);
     setLoading(true);
   };
+
+  // 清理 blob URL
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+      }
+    };
+  }, []);
+
+  // 过滤栏键盘快捷键
+  usePreviewKeyboard(officeFilter, setOfficeFilter, officeFilterInputRef);
 
   useEffect(() => {
     const info = detectFileType(processedUrl);
     const detectedType = info.type;
     setFileType(detectedType);
     setContent('');
+    setOfficeFilter('');
     setError(null);
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setPdfBlobUrl(null);
 
     // 这些类型不需要 fetch，直接渲染
-    const noFetchTypes = ['xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt', 'pdf', 'image', 'video', 'audio', 'embed'];
+    const noFetchTypes = ['image', 'video', 'audio', 'embed'];
     if (noFetchTypes.includes(detectedType) || !detectedType) {
       setLoading(false);
       return;
     }
 
-    // markdown/code/csv/json/xml/gist/stackoverflow/readability 尝试 fetch
     setLoading(true);
     setError(null);
 
     const cleanUrl = processedUrl.split('#')[0];
     console.log('[FilePreview] Fetching:', cleanUrl, 'type:', detectedType);
 
-    chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: cleanUrl }, (response) => {
+    // PDF: 走 FETCH_PROXY 代理下载 → blob URL → Chrome 原生 PDF 阅读器
+    if (detectedType === 'pdf') {
+      chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: cleanUrl, responseType: 'arraybuffer' }, (response) => {
+        if (chrome.runtime.lastError) {
+          setError(`Network error: ${chrome.runtime.lastError.message}`);
+          setLoading(false);
+          return;
+        }
+        if (response?.ok && response.data) {
+          const binaryStr = atob(response.data);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const blob = new Blob([bytes], { type: 'application/pdf' });
+          const blobUrl = URL.createObjectURL(blob);
+          blobUrlRef.current = blobUrl;
+          setPdfBlobUrl(blobUrl);
+          setLoading(false);
+        } else {
+          setError(response?.error || 'Failed to load PDF');
+          setLoading(false);
+        }
+      });
+      return;
+    }
+
+    // Office 文档: builtin 模式走代理下载 → 前端库渲染 / 下载
+    const officeTypes = ['xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'];
+    if (officeTypes.includes(detectedType)) {
+      if (officeViewer !== 'builtin') {
+        setLoading(false);
+        return;
+      }
+      chrome.runtime.sendMessage({
+        type: 'FETCH_PROXY', url: cleanUrl, responseType: 'arraybuffer',
+        withCredentials: true,
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          setError(`Network error: ${chrome.runtime.lastError.message}`);
+          setLoading(false);
+          return;
+        }
+        if (response?.ok && response.data) {
+          const binaryStr = atob(response.data);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const loadAndRender = async () => {
+            try {
+              if (detectedType === 'xlsx' || detectedType === 'xls') {
+                const XLSX = await import('xlsx');
+                const workbook = XLSX.read(bytes.buffer, { type: 'array' });
+                const names = workbook.SheetNames;
+                const htmls = names.map(name => XLSX.utils.sheet_to_html(workbook.Sheets[name]));
+                sheetDataRef.current = { names, htmls };
+                setCurrentSheet(0);
+                setContent(htmls[0] || '');
+              } else if (detectedType === 'docx' || detectedType === 'doc') {
+                const mammoth = await import('mammoth');
+                const result = await mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+                setContent(result.value || '');
+              } else {
+                // pptx/ppt: 用 jszip 提取文字内容 + 创建 blob URL 供下载
+                const JSZip = await import('jszip');
+                const zip = await JSZip.loadAsync(bytes.buffer);
+                const slideFiles = Object.keys(zip.files).filter(name => name.match(/ppt\/slides\/slide\d+\.xml/));
+                slideFiles.sort();
+                const slideTexts: string[] = [];
+                for (const file of slideFiles) {
+                  const xml = await zip.files[file].async('text');
+                  const aTMatches = xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [];
+                  const lines = aTMatches.map(m => m.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+                  if (lines.length > 0) {
+                    slideTexts.push('--- Slide ' + (slideFiles.indexOf(file) + 1) + ' ---');
+                    slideTexts.push(...lines);
+                  }
+                }
+                const mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+                const blob = new Blob([bytes], { type: mimeType });
+                const blobUrl = URL.createObjectURL(blob);
+                blobUrlRef.current = blobUrl;
+                setPdfBlobUrl(blobUrl);
+                setContent(slideTexts.join('\n') || '(No text content found)');
+              }
+              setLoading(false);
+            } catch {
+              setError('Failed to parse document');
+              setLoading(false);
+            }
+          };
+          loadAndRender();
+        } else {
+          setError(response?.error || 'Failed to load document');
+          setLoading(false);
+        }
+      });
+      return;
+    }
+
+    // readability/unknown 是网页，可能需要 cookie 认证
+    const withCredentials = detectedType === 'readability' || detectedType === 'unknown';
+
+    chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: cleanUrl, withCredentials }, (response) => {
       if (chrome.runtime.lastError) {
         setError(`Network error: ${chrome.runtime.lastError.message}`);
         setLoading(false);
@@ -1037,7 +1171,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
         setLoading(false);
       }
     });
-  }, [processedUrl, retryCount]);
+  }, [processedUrl, retryCount, officeViewer]);
 
   const getFileIcon = (type: string): string => {
     const icons: Record<string, string> = {
@@ -1116,6 +1250,9 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
   const renderContent = () => {
     switch (fileType) {
       case 'pdf':
+        if (pdfBlobUrl) {
+          return <embed src={pdfBlobUrl} type="application/pdf" style={{ width: '100%', height: '100%' }} />;
+        }
         return <iframe src={processedUrl} style={{ width: '100%', height: '100%', border: 'none' }} title={displayFilename} />;
       case 'image':
         return <img src={processedUrl} alt={displayFilename} style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />;
@@ -1128,7 +1265,118 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
             <audio src={processedUrl} controls autoPlay />
           </div>
         );
-      case 'xlsx': case 'xls': case 'docx': case 'doc': case 'pptx': case 'ppt':
+      case 'xlsx': case 'xls':
+        if (officeViewer === 'builtin' && content) {
+          const { names, htmls } = sheetDataRef.current;
+          const filteredHtml = filterXlsxHtml(htmls[currentSheet] || content, officeFilter);
+          return (
+            <div className="file-preview-markdown-container">
+              {htmls.length > 1 && (
+                <div className="file-preview-sheet-tabs">
+                  {names.map((name, i) => (
+                    <button
+                      key={i}
+                      className={`file-preview-sheet-tab ${currentSheet === i ? 'active' : ''}`}
+                      onClick={() => { setCurrentSheet(i); setContent(htmls[i]); }}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="file-preview-filter-bar">
+                <span className="file-preview-filter-prefix">🔍</span>
+                <input
+                  ref={officeFilterInputRef}
+                  type="text"
+                  className="file-preview-filter-input"
+                  placeholder="Filter rows... (Esc to clear)"
+                  value={officeFilter}
+                  onChange={(e) => setOfficeFilter(e.target.value)}
+                />
+                {officeFilter && (
+                  <button className="file-preview-filter-clear" onClick={() => { setOfficeFilter(''); officeFilterInputRef.current?.focus(); }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className="file-preview-markdown" dangerouslySetInnerHTML={{ __html: filteredHtml }} />
+            </div>
+          );
+        }
+        return (
+          <OfficeDocumentPreview 
+            url={processedUrl} 
+            fileType={fileType}
+            officeViewer={officeViewer}
+            displayFilename={displayFilename}
+          />
+        );
+      case 'docx': case 'doc':
+        if (officeViewer === 'builtin' && content) {
+          const filteredHtml = filterDocxHtml(content, officeFilter);
+          return (
+            <div className="file-preview-markdown-container">
+              <div className="file-preview-filter-bar">
+                <span className="file-preview-filter-prefix">🔍</span>
+                <input
+                  ref={officeFilterInputRef}
+                  type="text"
+                  className="file-preview-filter-input"
+                  placeholder="Filter content... (Esc to clear)"
+                  value={officeFilter}
+                  onChange={(e) => setOfficeFilter(e.target.value)}
+                />
+                {officeFilter && (
+                  <button className="file-preview-filter-clear" onClick={() => { setOfficeFilter(''); officeFilterInputRef.current?.focus(); }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className="file-preview-markdown" dangerouslySetInnerHTML={{ __html: filteredHtml }} />
+            </div>
+          );
+        }
+        return (
+          <OfficeDocumentPreview 
+            url={processedUrl} 
+            fileType={fileType}
+            officeViewer={officeViewer}
+            displayFilename={displayFilename}
+          />
+        );
+      case 'pptx': case 'ppt':
+        if (officeViewer === 'builtin' && pdfBlobUrl) {
+          return (
+            <div className="file-preview-markdown-container">
+              <div className="file-preview-filter-bar">
+                <span className="file-preview-filter-prefix">🔍</span>
+                <input
+                  ref={officeFilterInputRef}
+                  type="text"
+                  className="file-preview-filter-input"
+                  placeholder="Filter slides... (Esc to clear)"
+                  value={officeFilter}
+                  onChange={(e) => setOfficeFilter(e.target.value)}
+                />
+                {officeFilter && (
+                  <button className="file-preview-filter-clear" onClick={() => { setOfficeFilter(''); officeFilterInputRef.current?.focus(); }}>
+                    ✕
+                  </button>
+                )}
+              </div>
+              <div className="file-preview-markdown">
+                <pre className="file-preview-pptx-text">
+                  {pptxFilteredLines}
+                </pre>
+              </div>
+              <div className="file-preview-office-controls" style={{ padding: '8px 16px', borderTop: '1px solid var(--color-border)' }}>
+                <a href={pdfBlobUrl} download={displayFilename} className="file-preview-btn">Download</a>
+                <button className="file-preview-btn" onClick={() => window.open(processedUrl, '_blank')}>Open Original</button>
+              </div>
+            </div>
+          );
+        }
         return (
           <OfficeDocumentPreview 
             url={processedUrl} 
@@ -1165,15 +1413,17 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
       case 'stackoverflow':
         return <HtmlPreview content={content} />;
       default:
-        // 对于unknown类型，尝试iframe预览
+        // 有 fetch 到的内容（通过 FETCH_PROXY + credentials:include），优先用 Readability 展示
+        if (content) {
+          return <ReadabilityPreview content={content} />;
+        }
+        // 无法 fetch 的页面尝试 iframe 预览（受限页面可能无法加载）
         return (
           <div className="file-preview-iframe-container">
             <iframe
               src={processedUrl}
               style={{ width: '100%', height: '100%', border: 'none' }}
               title={displayFilename}
-              onLoad={() => console.log('[FilePreview] Iframe loaded successfully')}
-              onError={() => console.log('[FilePreview] Iframe failed to load')}
             />
             <div className="file-preview-iframe-fallback">
               <p>If the preview doesn't load properly:</p>
