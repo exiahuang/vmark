@@ -18,7 +18,9 @@ export type FileType =
   | 'unknown'
   | 'embed'
   | 'gist'
-  | 'stackoverflow';
+  | 'stackoverflow'
+  | 'googleViewer'
+  | 'drawio';
 
 export interface FilePreviewInfo {
   type: FileType;
@@ -59,6 +61,17 @@ const extensionMap: Record<string, FileType> = {
   // Office - PowerPoint
   'pptx': 'pptx', 'ppt': 'ppt', 'pptm': 'pptx', 'potx': 'pptx',
   'pot': 'ppt', 'odp': 'pptx',
+
+  // Google Docs Viewer 支持的其他格式
+  'psd': 'googleViewer', 'ai': 'googleViewer', 'dxf': 'googleViewer',
+  'eps': 'googleViewer', 'ps': 'googleViewer',
+  'ttf': 'googleViewer',
+  'xps': 'googleViewer',
+  'zip': 'googleViewer', 'rar': 'googleViewer',
+  'pages': 'googleViewer',
+
+  // draw.io
+  'drawio': 'drawio',
 
   // Markdown
   'md': 'markdown', 'markdown': 'markdown', 'mdown': 'markdown',
@@ -495,6 +508,8 @@ export function getFileTypeDisplayName(fileType: FileType): string {
     'pptx': 'PowerPoint (PPTX)',
     'ppt': 'PowerPoint (PPT)',
     'markdown': 'Markdown',
+    'googleViewer': 'Google Docs Viewer',
+    'drawio': 'Draw.io',
     'code': 'Code/Text',
     'csv': 'CSV Data',
     'json': 'JSON Data',

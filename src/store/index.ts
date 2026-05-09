@@ -8,11 +8,12 @@ import type {
   ListViewMode,
   PanelMode,
   SearchMode,
+  OfficeViewer,
   CategoryRule,
   Language
 } from '../types';
 import { getTranslations } from '../i18n';
-import { preprocessPreviewUrl } from '../utils/filePreview';
+import { preprocessPreviewUrl, detectFileType } from '../utils/filePreview';
 
 export const DEFAULT_RULES: Record<string, CategoryRule> = {
   SNS: {
@@ -796,9 +797,37 @@ function numericIdFromString(value: string): number {
   return Math.abs(hash);
 }
 
+export function resolveViewerUrl(url: string): string {
+  if (url.includes('docs.google.com') || url.includes('view.officeapps.live.com')) return url;
+  const state = useStore.getState();
+  const info = detectFileType(url);
+  const processed = preprocessPreviewUrl(url);
+
+  if (info.type === 'drawio') return `https://viewer.diagrams.net/#U${encodeURIComponent(processed)}`;
+  if (info.type === 'googleViewer') return `https://docs.google.com/viewer?url=${encodeURIComponent(processed)}&embedded=true`;
+
+  const viewer: OfficeViewer | undefined =
+    info.type === 'pdf' ? state.pdfViewer :
+    info.type === 'pptx' || info.type === 'ppt' ? state.pptxViewer :
+    info.type === 'xlsx' || info.type === 'xls' ? state.xlsxViewer :
+    info.type === 'docx' || info.type === 'doc' ? state.docxViewer :
+    undefined;
+
+  if (viewer && viewer !== 'builtin') {
+    if (info.type === 'pdf' && viewer === 'microsoft') {
+      return `https://docs.google.com/viewer?url=${encodeURIComponent(processed)}&embedded=true`;
+    }
+    if (viewer === 'google') return `https://docs.google.com/viewer?url=${encodeURIComponent(processed)}&embedded=true`;
+    return `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(processed)}`;
+  }
+
+  return url;
+}
+
 export async function openTabItem(item: TabItem, active: boolean): Promise<void> {
+  const url = resolveViewerUrl(item.url);
   try {
-    const matches = await chrome.tabs.query({ url: item.url });
+    const matches = await chrome.tabs.query({ url });
     const existing = matches.find(tab => tab.id !== undefined);
 
     if (existing?.id !== undefined) {
@@ -809,9 +838,9 @@ export async function openTabItem(item: TabItem, active: boolean): Promise<void>
       return;
     }
 
-    await chrome.tabs.create({ url: item.url, active });
+    await chrome.tabs.create({ url, active });
   } catch {
-    await chrome.tabs.create({ url: item.url, active });
+    await chrome.tabs.create({ url, active });
   }
 }
 

@@ -1,7 +1,6 @@
 import { useEffect, useCallback } from 'react';
 import { useStore, getFilteredItems, getVisibleItems, getVisibleGroupedItems, getGroupedItemsByDomain, getGroupKey, openTabItem } from '../store';
 import type { TabCategory } from '../types';
-import { detectFileType, preprocessPreviewUrl } from '../utils/filePreview';
 
 const TAB_CATEGORIES: TabCategory[] = ['CURRENT', 'FAVORITES', 'HISTORY', 'SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 let lastGPressAt = 0;

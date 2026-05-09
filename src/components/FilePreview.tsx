@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { detectFileType, getFileTypeDisplayName, preprocessPreviewUrl } from '../utils/filePreview';
-import { useStore } from '../store';
+import { useStore, resolveViewerUrl } from '../store';
 import { debugLog } from '../utils/debug';
 import ReadabilityPreview from './ReadabilityPreview';
 import './FilePreview.css';
@@ -1043,7 +1043,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
     setPdfBlobUrl(null);
 
     // 这些类型不需要 fetch，直接渲染
-    const noFetchTypes = ['image', 'video', 'audio', 'embed'];
+    const noFetchTypes = ['image', 'video', 'audio', 'embed', 'googleViewer', 'drawio'];
     if (noFetchTypes.includes(detectedType) || !detectedType) {
       setLoading(false);
       return;
@@ -1189,7 +1189,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
       'xlsx': '📊', 'xls': '📊', 'docx': '📝', 'doc': '📝',
       'pptx': '📽️', 'ppt': '📽️', 'markdown': '📄', 'code': '💻',
       'csv': '📋', 'json': '📋', 'xml': '📋',
-      'unknown': '📄', 'embed': '🎥', 'gist': '📝', 'stackoverflow': '❓',
+      'googleViewer': '🌐', 'drawio': '📐', 'unknown': '📄', 'embed': '🎥', 'gist': '📝', 'stackoverflow': '❓',
     };
     return icons[type] || '📄';
   };
@@ -1264,7 +1264,6 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           return <embed src={pdfBlobUrl} type="application/pdf" style={{ width: '100%', height: '100%' }} />;
         }
         if (pdfViewer !== 'builtin') {
-          // MS Online 不支持 PDF，回退到 Google Docs
           const effectiveViewer = pdfViewer === 'microsoft' ? 'google' : pdfViewer;
           return <iframe src={getOfficeViewerUrl(processedUrl, effectiveViewer)} style={{ width: '100%', height: '100%', border: 'none' }} title={displayFilename} />;
         }
@@ -1423,6 +1422,23 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
             referrerPolicy="strict-origin-when-cross-origin"
           />
         );
+      case 'googleViewer':
+        return (
+          <iframe
+            src={`https://docs.google.com/viewer?url=${encodeURIComponent(processedUrl)}&embedded=true`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title={displayFilename}
+          />
+        );
+      case 'drawio':
+        return (
+          <iframe
+            src={`https://viewer.diagrams.net/#U${encodeURIComponent(processedUrl)}`}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title={displayFilename}
+            allow="autoplay; clipboard-read; clipboard-write"
+          />
+        );
       case 'gist':
         return <CodePreview content={content} filename={displayFilename} />;
       case 'stackoverflow':
@@ -1460,7 +1476,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           <span className="file-preview-type">{getFileTypeDisplayName(fileType as any)}</span>
         </div>
         <div className="file-preview-header-actions">
-          <button className="file-preview-btn" onClick={() => window.open(processedUrl, '_blank')}>Open</button>
+          <button className="file-preview-btn" onClick={() => window.open(resolveViewerUrl(processedUrl), '_blank')}>Open</button>
           <button className="file-preview-btn file-preview-btn-close" onClick={onClose} title="Close preview">✕</button>
         </div>
       </div>
