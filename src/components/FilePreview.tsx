@@ -992,7 +992,10 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
   const sheetDataRef = useRef<{ names: string[]; htmls: string[] }>({ names: [], htmls: [] });
   const officeFilterInputRef = useRef<HTMLInputElement>(null);
   const processedUrl = preprocessPreviewUrl(url);
-  const officeViewer = useStore((s) => s.officeViewer);
+  const pdfViewer = useStore((s) => s.pdfViewer);
+  const pptxViewer = useStore((s) => s.pptxViewer);
+  const xlsxViewer = useStore((s) => s.xlsxViewer);
+  const docxViewer = useStore((s) => s.docxViewer);
 
   const displayFilename = filename || processedUrl.split('/').pop() || 'file';
 
@@ -1052,8 +1055,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
     const cleanUrl = processedUrl.split('#')[0];
     console.log('[FilePreview] Fetching:', cleanUrl, 'type:', detectedType);
 
-    // PDF: 走 FETCH_PROXY 代理下载 → blob URL → Chrome 原生 PDF 阅读器
+    // PDF: builtin 走 FETCH_PROXY 代理下载 → blob URL → Chrome 原生 PDF 阅读器
     if (detectedType === 'pdf') {
+      if (pdfViewer !== 'builtin') {
+        setLoading(false);
+        return;
+      }
       chrome.runtime.sendMessage({ type: 'FETCH_PROXY', url: cleanUrl, responseType: 'arraybuffer' }, (response) => {
         if (chrome.runtime.lastError) {
           setError(`Network error: ${chrome.runtime.lastError.message}`);
@@ -1082,7 +1089,10 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
     // Office 文档: builtin 模式走代理下载 → 前端库渲染 / 下载
     const officeTypes = ['xlsx', 'xls', 'docx', 'doc', 'pptx', 'ppt'];
     if (officeTypes.includes(detectedType)) {
-      if (officeViewer !== 'builtin') {
+      const viewerForType = detectedType === 'xlsx' || detectedType === 'xls' ? xlsxViewer
+        : detectedType === 'docx' || detectedType === 'doc' ? docxViewer
+        : pptxViewer;
+      if (viewerForType !== 'builtin') {
         setLoading(false);
         return;
       }
@@ -1171,7 +1181,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
         setLoading(false);
       }
     });
-  }, [processedUrl, retryCount, officeViewer]);
+  }, [processedUrl, retryCount, pdfViewer, pptxViewer, xlsxViewer, docxViewer]);
 
   const getFileIcon = (type: string): string => {
     const icons: Record<string, string> = {
@@ -1250,8 +1260,13 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
   const renderContent = () => {
     switch (fileType) {
       case 'pdf':
-        if (pdfBlobUrl) {
+        if (pdfViewer === 'builtin' && pdfBlobUrl) {
           return <embed src={pdfBlobUrl} type="application/pdf" style={{ width: '100%', height: '100%' }} />;
+        }
+        if (pdfViewer !== 'builtin') {
+          // MS Online 不支持 PDF，回退到 Google Docs
+          const effectiveViewer = pdfViewer === 'microsoft' ? 'google' : pdfViewer;
+          return <iframe src={getOfficeViewerUrl(processedUrl, effectiveViewer)} style={{ width: '100%', height: '100%', border: 'none' }} title={displayFilename} />;
         }
         return <iframe src={processedUrl} style={{ width: '100%', height: '100%', border: 'none' }} title={displayFilename} />;
       case 'image':
@@ -1266,7 +1281,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           </div>
         );
       case 'xlsx': case 'xls':
-        if (officeViewer === 'builtin' && content) {
+        if (xlsxViewer === 'builtin' && content) {
           const { names, htmls } = sheetDataRef.current;
           const filteredHtml = filterXlsxHtml(htmls[currentSheet] || content, officeFilter);
           return (
@@ -1308,12 +1323,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           <OfficeDocumentPreview 
             url={processedUrl} 
             fileType={fileType}
-            officeViewer={officeViewer}
+            officeViewer={xlsxViewer}
             displayFilename={displayFilename}
           />
         );
       case 'docx': case 'doc':
-        if (officeViewer === 'builtin' && content) {
+        if (docxViewer === 'builtin' && content) {
           const filteredHtml = filterDocxHtml(content, officeFilter);
           return (
             <div className="file-preview-markdown-container">
@@ -1341,12 +1356,12 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           <OfficeDocumentPreview 
             url={processedUrl} 
             fileType={fileType}
-            officeViewer={officeViewer}
+            officeViewer={docxViewer}
             displayFilename={displayFilename}
           />
         );
       case 'pptx': case 'ppt':
-        if (officeViewer === 'builtin' && pdfBlobUrl) {
+        if (pptxViewer === 'builtin' && pdfBlobUrl) {
           return (
             <div className="file-preview-markdown-container">
               <div className="file-preview-filter-bar">
@@ -1381,7 +1396,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({ url, filename, onClose
           <OfficeDocumentPreview 
             url={processedUrl} 
             fileType={fileType}
-            officeViewer={officeViewer}
+            officeViewer={pptxViewer}
             displayFilename={displayFilename}
           />
         );

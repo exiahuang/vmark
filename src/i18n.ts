@@ -56,6 +56,7 @@ export const en = {
   save: 'Save',
   close: 'Close',
   github: 'GitHub',
+  chromeStore: 'Chrome Web Store',
   historySettings: 'History Settings',
   historyMaxResults: 'Max results',
   preview: 'Preview',
@@ -63,7 +64,11 @@ export const en = {
   searchMode: 'Search mode',
   plain: 'PLAIN',
   regex: 'REGEX',
-  officeViewer: 'Office Viewer',
+  filePreview: 'File preview app',
+  pdf: 'PDF',
+  pptx: 'PPT / PPTX',
+  xlsx: 'Excel / XLSX',
+  docx: 'Word / DOCX',
 };
 
 export const zh: typeof en = {
@@ -124,6 +129,7 @@ export const zh: typeof en = {
   save: '保存',
   close: '关闭',
   github: 'GitHub',
+  chromeStore: 'Chrome 网上应用店',
   historySettings: '历史设置',
   historyMaxResults: '最大结果数',
   preview: '预览',
@@ -131,7 +137,11 @@ export const zh: typeof en = {
   searchMode: '搜索模式',
   plain: '普通',
   regex: '正则',
-  officeViewer: 'Office 预览器',
+  filePreview: '文件预览应用',
+  pdf: 'PDF',
+  pptx: 'PPT / PPTX',
+  xlsx: 'Excel / XLSX',
+  docx: 'Word / DOCX',
 };
 
 export const ja: typeof en = {
@@ -192,6 +202,7 @@ export const ja: typeof en = {
   save: '保存',
   close: '閉じる',
   github: 'GitHub',
+  chromeStore: 'Chrome Web Store',
   historySettings: '履歴設定',
   historyMaxResults: '最大結果数',
   preview: 'プレビュー',
@@ -199,7 +210,11 @@ export const ja: typeof en = {
   searchMode: '検索モード',
   plain: 'プレーン',
   regex: '正規表現',
-  officeViewer: 'Office ビューア',
+  filePreview: 'ファイルプレビューアプリ',
+  pdf: 'PDF',
+  pptx: 'PPT / PPTX',
+  xlsx: 'Excel / XLSX',
+  docx: 'Word / DOCX',
 };
 
 export type Language = 'en' | 'zh' | 'ja';

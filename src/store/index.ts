@@ -8,7 +8,6 @@ import type {
   ListViewMode,
   PanelMode,
   SearchMode,
-  OfficeViewer,
   CategoryRule,
   Language
 } from '../types';
@@ -64,7 +63,7 @@ export const DEFAULT_RULES: Record<string, CategoryRule> = {
 
 const AUTO_CATEGORIES: TabCategory[] = ['SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 type CategorySourceState = Pick<AppState, 'items' | 'favorites' | 'browserHistory'> & Partial<Pick<AppState, 'activeCategory'>>;
-type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults' | 'officeViewer' | 'debug'>;
+type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults' | 'pdfViewer' | 'pptxViewer' | 'xlsxViewer' | 'docxViewer' | 'debug'>;
 type CoreCategoryLabelState = Pick<AppState, 'categoryLabels'>;
 const STORAGE_KEY = 'vmark.state';
 export const DEFAULT_CATEGORY_LABELS = {
@@ -124,7 +123,10 @@ async function savePersistedState(): Promise<void> {
         itemRenames: state.itemRenames,
         groupCollapsed: state.groupCollapsed,
         historyMaxResults: state.historyMaxResults,
-        officeViewer: state.officeViewer,
+        pdfViewer: state.pdfViewer,
+        pptxViewer: state.pptxViewer,
+        xlsxViewer: state.xlsxViewer,
+        docxViewer: state.docxViewer,
         debug: state.debug,
       },
     });
@@ -151,7 +153,10 @@ export async function hydratePersistedState(): Promise<void> {
       itemRenames: mergeItemRenames(persisted.itemRenames),
       groupCollapsed: mergeGroupCollapsed(persisted.groupCollapsed),
       historyMaxResults: typeof persisted.historyMaxResults === 'number' && persisted.historyMaxResults > 0 ? persisted.historyMaxResults : 500,
-      officeViewer: ['builtin', 'google', 'microsoft'].includes(persisted.officeViewer) ? persisted.officeViewer : 'google',
+      pdfViewer: ['builtin', 'google', 'microsoft'].includes(persisted.pdfViewer) ? persisted.pdfViewer : 'builtin',
+      pptxViewer: ['builtin', 'google', 'microsoft'].includes(persisted.pptxViewer) ? persisted.pptxViewer : 'microsoft',
+      xlsxViewer: ['builtin', 'google', 'microsoft'].includes(persisted.xlsxViewer) ? persisted.xlsxViewer : 'microsoft',
+      docxViewer: ['builtin', 'google', 'microsoft'].includes(persisted.docxViewer) ? persisted.docxViewer : 'microsoft',
       debug: typeof persisted.debug === 'boolean' ? persisted.debug : false,
     });
   } catch {
@@ -415,7 +420,10 @@ interface Store extends AppState {
   setHistoryMaxResults: (maxResults: number) => void;
   setPreview: (url: string, filename?: string) => void;
   closePreview: () => void;
-  setOfficeViewer: (viewer: OfficeViewer) => void;
+  setPdfViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
+  setPptxViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
+  setXlsxViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
+  setDocxViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
   setDebug: (debug: boolean) => void;
   fetchTabs: () => Promise<void>;
   fetchBookmarks: (query?: string) => Promise<void>;
@@ -449,7 +457,10 @@ export const useStore = create<Store>((set) => ({
   panelMode: 'NONE',
   previewUrl: null,
   previewFilename: null,
-  officeViewer: 'google' as OfficeViewer,
+  pdfViewer: 'builtin' as 'builtin' | 'google' | 'microsoft',
+  pptxViewer: 'microsoft' as 'builtin' | 'google' | 'microsoft',
+  xlsxViewer: 'microsoft' as 'builtin' | 'google' | 'microsoft',
+  docxViewer: 'microsoft' as 'builtin' | 'google' | 'microsoft',
   historyMaxResults: 500,
   debug: false,
 
@@ -753,7 +764,10 @@ export const useStore = create<Store>((set) => ({
 
   closePreview: () => set({ previewUrl: null, previewFilename: null, panelMode: 'NONE' }),
 
-  setOfficeViewer: (officeViewer: OfficeViewer) => { set({ officeViewer }); void savePersistedState(); },
+  setPdfViewer: (pdfViewer) => { set({ pdfViewer }); void savePersistedState(); },
+  setPptxViewer: (pptxViewer) => { set({ pptxViewer }); void savePersistedState(); },
+  setXlsxViewer: (xlsxViewer) => { set({ xlsxViewer }); void savePersistedState(); },
+  setDocxViewer: (docxViewer) => { set({ docxViewer }); void savePersistedState(); },
   setDebug: (debug: boolean) => { set({ debug }); void savePersistedState(); },
 }));
 

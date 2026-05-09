@@ -107,7 +107,7 @@ function getTabSlotLabel(category: TabCategory, t: ReturnType<typeof getTranslat
 }
 
 export function OverlayPanel() {
-  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels, historyMaxResults, setHistoryMaxResults, officeViewer, setOfficeViewer, debug, setDebug } = useStore();
+  const { panelMode, setPanelMode, theme, setTheme, language, setLanguage, categoryRules, setCategoryRules, categoryLabels, setCategoryLabels, historyMaxResults, setHistoryMaxResults, pdfViewer, setPdfViewer, pptxViewer, setPptxViewer, xlsxViewer, setXlsxViewer, docxViewer, setDocxViewer, debug, setDebug } = useStore();
   const [draftRules, setDraftRules] = useState(() => cloneRules(categoryRules));
   const [draftLabels, setDraftLabels] = useState(() => cloneLabels(categoryLabels));
   const [draftMaxResults, setDraftMaxResults] = useState(historyMaxResults);
@@ -219,20 +219,29 @@ export function OverlayPanel() {
               </div>
             </div>
 
-            <div className="settings-section-heading">{t.officeViewer || 'Office Viewer'}</div>
-            <div className="theme-grid compact">
-              {(['builtin', 'google', 'microsoft'] as const).map((viewer) => {
-                const active = officeViewer === viewer;
-                return (
-                  <button
-                    key={viewer}
-                    className={`theme-card ${active ? 'active' : ''}`}
-                    onClick={() => setOfficeViewer(viewer)}
-                  >
-                    <span className="theme-name">{viewer === 'builtin' ? 'Built-in' : viewer === 'google' ? 'Google Docs' : 'MS Online'}</span>
-                  </button>
-                );
-              })}
+            <div className="settings-section-heading">{t.filePreview}</div>
+            <div className="file-preview-settings">
+              {[
+                { label: t.pdf, viewer: pdfViewer, setter: setPdfViewer },
+                { label: t.pptx, viewer: pptxViewer, setter: setPptxViewer },
+                { label: t.xlsx, viewer: xlsxViewer, setter: setXlsxViewer },
+                { label: t.docx, viewer: docxViewer, setter: setDocxViewer },
+              ].map(({ label, viewer, setter }) => (
+                <div key={label} className="file-preview-row">
+                  <span className="file-preview-label">{label}</span>
+                  <div className="file-preview-options">
+                    {(['builtin', 'google', 'microsoft'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        className={`file-preview-option ${viewer === opt ? 'active' : ''}`}
+                        onClick={() => setter(opt)}
+                      >
+                        {opt === 'builtin' ? 'Built-in' : opt === 'google' ? 'Google Docs' : 'MS Online'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="settings-section-heading settings-section-heading-spaced">{t.historySettings}</div>

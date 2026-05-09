@@ -150,6 +150,44 @@ function getExtensionFromUrl(url: string): string {
 }
 
 /**
+ * 从 Google Docs / MS Online 等预览 URL 中提取真实文件 URL
+ * 已是真实 URL 则原样返回
+ */
+export function extractRealUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+
+    // Google Docs Viewer: https://docs.google.com/viewer?url=<encoded_url>
+    if (urlObj.hostname === 'docs.google.com' && urlObj.pathname.startsWith('/viewer')) {
+      const realUrl = urlObj.searchParams.get('url');
+      if (realUrl) return decodeURIComponent(realUrl);
+    }
+
+    // MS Office Online: https://view.officeapps.live.com/op/view.aspx?src=<encoded_url>
+    if (urlObj.hostname === 'view.officeapps.live.com' || urlObj.hostname === 'onenote.officeapps.live.com') {
+      const realUrl = urlObj.searchParams.get('src');
+      if (realUrl) return decodeURIComponent(realUrl);
+    }
+
+    // Google Docs native URLs (docs.google.com/spreadsheets/d/..., etc.)
+    const nativeMatch = url.match(/docs\.google\.com\/(spreadsheets|document|presentation)\/d\/([^/]+)/);
+    if (nativeMatch) {
+      const [, type, docId] = nativeMatch;
+      const exportFormats: Record<string, string> = {
+        spreadsheets: 'xlsx',
+        document: 'docx',
+        presentation: 'pptx',
+      };
+      const ext = exportFormats[type] || 'xlsx';
+      return `https://docs.google.com/${type}/d/${docId}/export?format=${ext}`;
+    }
+  } catch {
+    // ignore
+  }
+  return url;
+}
+
+/**
  * 预处理预览 URL，处理特殊平台的 URL 转换
  * 1. GitHub blob URL -> raw.githubusercontent.com
  * 2. GitHub raw URL -> 直接使用
@@ -161,9 +199,14 @@ function getExtensionFromUrl(url: string): string {
  * 8. CodePen -> embed URL
  * 9. JSFiddle -> embed URL
  * 10. Google Drive -> direct download URL
+ * 11. Google Docs / MS Online viewer URL -> 提取真实 URL
  */
 export function preprocessPreviewUrl(url: string): string {
   try {
+    // 先从 viewer URL 中提取真实文件 URL
+    const realUrl = extractRealUrl(url);
+    if (realUrl !== url) return preprocessPreviewUrl(realUrl);
+
     const urlObj = new URL(url);
 
     // 1. GitHub blob URL 转 raw URL
@@ -292,11 +335,6 @@ export function preprocessPreviewUrl(url: string): string {
         urlObj.searchParams.set('dl', '1');
         return urlObj.toString();
       }
-    }
-
-    // 14. 已经是 Google Docs Viewer URL，直接返回
-    if (urlObj.hostname === 'docs.google.com' && urlObj.pathname.startsWith('/viewer')) {
-      return url;
     }
 
     return url;

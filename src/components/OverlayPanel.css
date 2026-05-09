@@ -295,3 +295,42 @@
 .settings-section-heading-spaced {
   margin-top: 18px;
 }
+
+.file-preview-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.file-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-preview-label {
+  min-width: 100px;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.file-preview-options {
+  display: flex;
+  gap: 6px;
+}
+
+.file-preview-option {
+  border: 1px solid var(--color-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.file-preview-option.active {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary) inset;
+}

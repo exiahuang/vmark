@@ -64,7 +64,10 @@ export interface AppState {
   panelMode: PanelMode;
   previewUrl: string | null;
   previewFilename: string | null;
-  officeViewer: OfficeViewer;
+  pdfViewer: OfficeViewer;
+  pptxViewer: OfficeViewer;
+  xlsxViewer: OfficeViewer;
+  docxViewer: OfficeViewer;
   historyMaxResults: number;
   debug?: boolean;
 }
