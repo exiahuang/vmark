@@ -2,7 +2,7 @@ import { useEffect, useCallback } from 'react';
 import { useStore, getFilteredItems, getVisibleItems, getVisibleGroupedItems, getGroupedItemsByDomain, getGroupKey, openTabItem } from '../store';
 import type { TabCategory } from '../types';
 
-const TAB_CATEGORIES: TabCategory[] = ['CURRENT', 'FAVORITES', 'HISTORY', 'SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
+const TAB_CATEGORIES: TabCategory[] = ['CURRENT', 'FAVORITES', 'HISTORY', 'SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN', 'NOTES'];
 let lastGPressAt = 0;
 
 function cycleCategory(state: ReturnType<typeof useStore.getState>, delta: number, setActiveCategory: (category: TabCategory) => void) {
@@ -42,6 +42,10 @@ export function useKeyboard() {
     // 如果焦点在文件预览的过滤框内，跳过所有快捷键
     const target = e.target as HTMLElement;
     if (target.tagName === 'INPUT' && target.closest('.file-preview-filter-bar')) {
+      return;
+    }
+    // 便签编辑区内只允许 Escape 键生效（用于退出编辑）
+    if (key !== 'Escape' && target.closest('.notes-panel') && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
       return;
     }
 
@@ -175,6 +179,12 @@ export function useKeyboard() {
       const pageSize = Math.floor(filtered.length / 2);
       const newIndex = Math.max(0, state.selectedIndex - pageSize);
       useStore.getState().setSelectedIndex(newIndex);
+      return;
+    }
+
+    if (key === '0' && !ctrlKey && !metaKey) {
+      e.preventDefault();
+      setActiveCategory(TAB_CATEGORIES[TAB_CATEGORIES.length - 1]);
       return;
     }
 

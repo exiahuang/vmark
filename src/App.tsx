@@ -2,10 +2,12 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { TabBar } from './components/TabBar';
 import { SearchBar } from './components/SearchBar';
 import { ItemList } from './components/ItemList';
+import { NotesPanel } from './components/NotesPanel';
 import { StatusBar } from './components/StatusBar';
 import { OverlayPanel } from './components/OverlayPanel';
 import { FilePreview } from './components/FilePreview';
-import { hydratePersistedState, useStore } from './store';
+import { hydratePersistedState, loadNotesFromSync, useStore } from './store';
+import { useKeyboard } from './hooks/useKeyboard';
 import { applyTheme } from './themes';
 import { detectFileType } from './utils/filePreview';
 import './App.css';
@@ -13,12 +15,18 @@ import './App.css';
 function App() {
   const { fetchTabs, fetchBookmarks, fetchHistory, theme, activeCategory, searchQuery, panelMode } = useStore();
 
+  useKeyboard();
+
   useEffect(() => {
     let cancelled = false;
 
     const initialize = async () => {
       await hydratePersistedState();
       if (cancelled) return;
+      const notes = await loadNotesFromSync();
+      if (notes.length > 0) {
+        useStore.setState({ notes });
+      }
       await fetchTabs();
       await fetchBookmarks('');
       await fetchHistory('');
@@ -42,9 +50,9 @@ function App() {
 
   useEffect(() => {
     if (activeCategory !== 'HISTORY') return;
-    const run = async () => { await fetchHistory(searchQuery); };
+    const run = async () => { await fetchHistory(); };
     void run();
-  }, [activeCategory, searchQuery, fetchHistory]);
+  }, [activeCategory, fetchHistory]);
 
   useEffect(() => {
     if (activeCategory !== 'FAVORITES') return;
@@ -97,7 +105,7 @@ function App() {
           className="list-panel"
           style={{ flex: showPreview ? `0 0 ${100 - previewWidth}%` : '1 1 auto' }}
         >
-          <ItemList />
+          {activeCategory === 'NOTES' ? <NotesPanel /> : <ItemList />}
         </div>
         {showPreview && (
           <>

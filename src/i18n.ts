@@ -1,4 +1,5 @@
 export const en = {
+  notes: 'Notes',
   current: 'Current',
   favorites: 'Favorites',
   history: 'History',
@@ -72,6 +73,7 @@ export const en = {
 };
 
 export const zh: typeof en = {
+  notes: '便签',
   current: '当前',
   favorites: '收藏',
   history: '历史',
@@ -145,6 +147,7 @@ export const zh: typeof en = {
 };
 
 export const ja: typeof en = {
+  notes: 'メモ',
   current: '現在',
   favorites: 'お気に入り',
   history: '履歴',

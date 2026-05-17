@@ -1,3 +1,13 @@
+export interface Note {
+  id: string;
+  content: string;
+  tags: string[];
+  color: string;
+  pinned: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface TabItem {
   id: number;
   url: string;
@@ -18,6 +28,7 @@ export interface CategoryRule {
 }
 
 export type TabCategory = 
+  | 'NOTES'
   | 'CURRENT' 
   | 'FAVORITES' 
   | 'HISTORY' 
@@ -69,5 +80,7 @@ export interface AppState {
   xlsxViewer: OfficeViewer;
   docxViewer: OfficeViewer;
   historyMaxResults: number;
+  notes: Note[];
+  noteTagFilter: string;
   debug?: boolean;
 }

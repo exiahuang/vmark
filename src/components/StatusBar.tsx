@@ -15,13 +15,14 @@ function useVersion() {
 }
 
 export function StatusBar() {
-  const { mode, activeCategory, sortMode, listViewMode, searchMode, setPanelMode, categoryRules, categoryLabels, language } = useStore();
+  const { mode, activeCategory, sortMode, listViewMode, searchMode, setPanelMode, categoryRules, categoryLabels, language, notes } = useStore();
   const state = useStore.getState();
-  const filtered = getFilteredItems(state);
+  const filtered = activeCategory === 'NOTES' ? [] : getFilteredItems(state);
+  const notesCount = activeCategory === 'NOTES' ? notes.length : 0;
   const t = useTranslation();
   const version = useVersion();
 
-  const filteredCount = filtered.length;
+  const filteredCount = activeCategory === 'NOTES' ? notesCount : filtered.length;
 
   return (
     <div className="status-bar">

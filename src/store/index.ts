@@ -3,6 +3,7 @@ import type {
   AppState,
   TabCategory,
   TabItem,
+  Note,
   ViewMode,
   SortMode,
   ListViewMode,
@@ -67,6 +68,7 @@ type CategorySourceState = Pick<AppState, 'items' | 'favorites' | 'browserHistor
 type PersistedState = Pick<AppState, 'history' | 'theme' | 'language' | 'sortMode' | 'listViewMode' | 'categoryRules' | 'categoryLabels' | 'itemRenames' | 'groupCollapsed' | 'historyMaxResults' | 'pdfViewer' | 'pptxViewer' | 'xlsxViewer' | 'docxViewer' | 'debug'>;
 type CoreCategoryLabelState = Pick<AppState, 'categoryLabels'>;
 const STORAGE_KEY = 'vmark.state';
+const NOTES_SYNC_KEY = 'vmark.notes';
 export const DEFAULT_CATEGORY_LABELS = {
   CURRENT: 'Current',
   FAVORITES: 'Favorites',
@@ -165,6 +167,39 @@ export async function hydratePersistedState(): Promise<void> {
   }
 }
 
+const NOTES_SYNC_KEY_LOCAL_FALLBACK = 'vmark.notes.fallback';
+
+async function saveNotesToSync(notes: Note[]): Promise<void> {
+  try {
+    await chrome.storage.sync.set({ [NOTES_SYNC_KEY]: notes });
+  } catch {
+    // Sync quota exceeded or sync disabled — fall back to local
+    try {
+      await chrome.storage.local.set({ [NOTES_SYNC_KEY_LOCAL_FALLBACK]: notes });
+    } catch {
+      // Ignore local fallback failures
+    }
+  }
+}
+
+export async function loadNotesFromSync(): Promise<Note[]> {
+  try {
+    const result = await chrome.storage.sync.get(NOTES_SYNC_KEY);
+    const synced = result[NOTES_SYNC_KEY];
+    if (Array.isArray(synced) && synced.length > 0) return synced;
+  } catch {
+    // Sync unavailable, try local fallback
+  }
+  try {
+    const result = await chrome.storage.local.get(NOTES_SYNC_KEY_LOCAL_FALLBACK);
+    const fallback = result[NOTES_SYNC_KEY_LOCAL_FALLBACK];
+    if (Array.isArray(fallback) && fallback.length > 0) return fallback;
+  } catch {
+    // Ignore
+  }
+  return [];
+}
+
 function mergeCategoryRules(rules: unknown): Record<string, CategoryRule> {
   const base = structuredClone(DEFAULT_RULES);
   if (!rules || typeof rules !== 'object') return base;
@@ -238,6 +273,7 @@ export function getCategoryLabel(
 ): string {
   const translations = getTranslations(language as Language);
   
+  if (category === 'NOTES') return translations.notes;
   if (category === 'CURRENT') return labels?.CURRENT || DEFAULT_CATEGORY_LABELS.CURRENT;
   if (category === 'FAVORITES') return labels?.FAVORITES || DEFAULT_CATEGORY_LABELS.FAVORITES;
   if (category === 'HISTORY') return labels?.HISTORY || DEFAULT_CATEGORY_LABELS.HISTORY;
@@ -255,6 +291,7 @@ export function getCategoryLabel(
 }
 
 export function getItemsForCategory(state: CategorySourceState, category: TabCategory = state.activeCategory ?? 'CURRENT'): TabItem[] {
+  if (category === 'NOTES') return [];
   if (category === 'CURRENT') return state.items;
   if (category === 'FAVORITES') return state.favorites;
   if (category === 'HISTORY') return state.browserHistory;
@@ -426,6 +463,10 @@ interface Store extends AppState {
   setXlsxViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
   setDocxViewer: (viewer: 'builtin' | 'google' | 'microsoft') => void;
   setDebug: (debug: boolean) => void;
+  addNote: (note: Note) => void;
+  updateNote: (id: string, partial: Partial<Note>) => void;
+  deleteNote: (id: string) => void;
+  setNoteTagFilter: (tag: string) => void;
   fetchTabs: () => Promise<void>;
   fetchBookmarks: (query?: string) => Promise<void>;
   fetchHistory: (query?: string) => Promise<void>;
@@ -463,6 +504,8 @@ export const useStore = create<Store>((set) => ({
   xlsxViewer: 'microsoft' as 'builtin' | 'google' | 'microsoft',
   docxViewer: 'microsoft' as 'builtin' | 'google' | 'microsoft',
   historyMaxResults: 500,
+  notes: [],
+  noteTagFilter: '',
   debug: false,
 
   setMode: (mode) => set({ mode }),
@@ -770,6 +813,26 @@ export const useStore = create<Store>((set) => ({
   setXlsxViewer: (xlsxViewer) => { set({ xlsxViewer }); void savePersistedState(); },
   setDocxViewer: (docxViewer) => { set({ docxViewer }); void savePersistedState(); },
   setDebug: (debug: boolean) => { set({ debug }); void savePersistedState(); },
+
+  addNote: (note) => set((state) => {
+    const notes = [note, ...state.notes];
+    void saveNotesToSync(notes);
+    return { notes };
+  }),
+
+  updateNote: (id, partial) => set((state) => {
+    const notes = state.notes.map(n => n.id === id ? { ...n, ...partial, updatedAt: Date.now() } : n);
+    void saveNotesToSync(notes);
+    return { notes };
+  }),
+
+  deleteNote: (id) => set((state) => {
+    const notes = state.notes.filter(n => n.id !== id);
+    void saveNotesToSync(notes);
+    return { notes };
+  }),
+
+  setNoteTagFilter: (noteTagFilter) => set({ noteTagFilter }),
 }));
 
 function historyEntryId(entry: chrome.history.HistoryItem): number {

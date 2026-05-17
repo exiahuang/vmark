@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { useStore, getFilteredItems, getVisibleItems, getGroupedItemsByDomain, getItemDisplayTitle, openTabItem } from '../store';
-import { useKeyboard } from '../hooks/useKeyboard';
 import type { TabItem, TabCategory } from '../types';
 import { detectFileType } from '../utils/filePreview';
 import { ContextMenu } from './ContextMenu';
@@ -23,8 +22,6 @@ export function ItemList() {
   const visibleItems = getVisibleItems(state);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
   const itemIndexById = new Map(visibleItems.map((item, index) => [item.id, index]));
-
-  useKeyboard();
 
   const [contextMenu, setContextMenu] = useState<{
     x: number;

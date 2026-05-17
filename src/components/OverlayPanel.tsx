@@ -15,7 +15,7 @@ const HELP_SECTIONS = [
       ['g / G', 'First / Last'],
       ['h / l', 'Prev / Next category'],
       ['J / K', 'Prev / Next group'],
-      ['1-9', 'Jump to tab'],
+      ['0-9', 'Jump to tab'],
     ],
   },
   {
@@ -46,6 +46,7 @@ const HELP_SECTIONS = [
 const SETTINGS_CATEGORIES: TabCategory[] = ['SNS', 'NEWS', 'RESERVED', 'TECH', 'CLOUD', 'LAN'];
 const PRIMARY_CATEGORIES: Array<'CURRENT' | 'FAVORITES' | 'HISTORY'> = ['CURRENT', 'FAVORITES', 'HISTORY'];
 const AUTO_CATEGORY_LABELS: Record<TabCategory, string> = {
+  NOTES: 'Notes',
   CURRENT: 'Tab 1',
   FAVORITES: 'Tab 2',
   HISTORY: 'Tab 3',
@@ -93,6 +94,7 @@ function normalizeRule(current: CategoryRule, patch: Partial<CategoryRule>): Cat
 
 function getTabSlotLabel(category: TabCategory, t: ReturnType<typeof getTranslations>): string {
   const map: Partial<Record<TabCategory, string>> = {
+    NOTES: 'Tab 0',
     CURRENT: 'Tab 1',
     FAVORITES: 'Tab 2',
     HISTORY: 'Tab 3',
